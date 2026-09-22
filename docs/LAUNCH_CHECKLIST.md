@@ -1,12 +1,12 @@
 # Launch checklist
 
-- [ ] Firebase project
-- [ ] Authentication and email verification
-- [ ] Firestore
-- [ ] Storage
-- [ ] Rules deployed and tested
-- [ ] Indexes deployed
-- [ ] App Check configured and monitored
+- [ ] Supabase project
+- [ ] Supabase Auth and email verification
+- [ ] PostgreSQL migration deployed
+- [ ] Supabase Storage private bucket
+- [ ] RLS policies deployed and tested
+- [ ] Database indexes deployed
+- [ ] Auth redirect URLs configured
 - [ ] AI provider configured or fallback explicitly enabled
 - [ ] Email provider account, sender, SPF, and DKIM
 - [ ] Stripe products and prices

@@ -7,18 +7,17 @@ DetailFlow is a quote funnel and lead workspace for automotive detailers. The fi
 - Next.js App Router + TypeScript + React
 - Responsive marketing page, public quote flow, and dashboard shell
 - Deterministic pricing engine in `lib/pricing.ts`
-- Firebase client boundary in `lib/firebase/client.ts`
-- Firestore and Storage rules with business membership isolation
+- Supabase Auth, PostgreSQL, Storage, and Row Level Security
 - Vitest pricing coverage
 - Configuration-first environment variables in `.env.example`
 
-The UI is deployable, but external production services are intentionally not claimed as connected until their real credentials are supplied. The public demo route is a UI flow and should be connected to a server-side Firestore submission action before launch.
+The UI is deployable, but external production services are intentionally not claimed as connected until their real credentials are supplied. The public demo route is a UI flow and should be connected to a server-side Supabase submission action before launch.
 
 ## Requirements
 
 - Node.js 20 LTS or newer
 - npm 10+
-- Firebase project
+- Supabase project on the Free plan
 - Vercel account for the primary deployment
 - Stripe, Resend/Postmark, and an AI provider only when those features are enabled
 
@@ -42,34 +41,39 @@ npm run build
 
 `npm run lint` should be wired to the chosen ESLint flat-config command before production launch. Next build currently performs its own lint/type validation.
 
-## Firebase setup
+## Supabase setup
 
-1. Create a Firebase project and register a Web app.
-2. Enable Email/Password in Authentication.
-3. Create Firestore in production mode and Storage in the region closest to the business.
-4. Copy the web app values into the `NEXT_PUBLIC_FIREBASE_*` variables.
-5. Install the Firebase CLI, run `firebase login`, and select the project with `firebase use --add`.
-6. Deploy boundaries from the repository root:
+1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard). The Free plan is enough for local development and an early MVP, although inactive projects may be paused.
+2. In **Project Settings > API**, copy **Project URL** into `NEXT_PUBLIC_SUPABASE_URL`.
+3. Copy the **publishable/anon key** into `NEXT_PUBLIC_SUPABASE_ANON_KEY`. It may be used in the browser because Row Level Security protects the database.
+4. Copy the **service_role key** into `SUPABASE_SERVICE_ROLE_KEY` only in local `.env.local` and Vercel server-only variables. Never commit or expose it.
+5. In **Authentication > Providers**, enable Email and configure the site URL as `http://localhost:3000` during development.
+6. In **Authentication > URL Configuration**, add the production Vercel domain and allowed redirect URLs before deploying.
+7. Create a private Storage bucket named `vehicle-photos`. Do not make it public; the app must use authenticated access or signed URLs.
+8. Run the database schema and Row Level Security migration from `supabase/migrations/` in the Supabase SQL Editor.
+9. Add these values to `.env.local`:
 
-```bash
-firebase deploy --only firestore:rules,firestore:indexes,storage
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-Read the complete sequence in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+The application uses Supabase Auth, PostgreSQL, Storage, and RLS. Firebase is not part of the active backend architecture.
 
 ## Data and authorization
 
-The data model is documented in [docs/DATABASE.md](docs/DATABASE.md). Every operational document is nested below a business and checked against `businesses/{businessId}/members/{uid}`. Customer photos are private Storage objects; public business assets are a separate path.
+The data model is documented in [docs/DATABASE.md](docs/DATABASE.md). Every operational row contains a `business_id` and is protected by Supabase Row Level Security. Customer photos are private Storage objects under the business and lead path.
 
-Do not place Admin SDK credentials in `NEXT_PUBLIC_*` variables. For server actions or route handlers, use a server-only Admin module and verify the Firebase ID token before reading or mutating tenant data.
+Do not place the Supabase service-role key in `NEXT_PUBLIC_*` variables. Browser queries use the anon key and RLS; server actions may use the service-role key only after verifying the authenticated user and business membership.
 
 ## External services checklist
 
 | SERVICE | REQUIRED? | WHY | ACCOUNT | CONFIGURATION | ENV VARS | PRODUCTION STEPS |
 |---|---|---|---|---|---|---|
-| Firebase Auth | Required | Account identity | Firebase Console | Email/password, authorized domains | `NEXT_PUBLIC_FIREBASE_*` | Enable provider, test verification/reset flows |
-| Firestore | Required | Tenant data | Firebase Console | Rules and indexes in repo | `FIREBASE_ADMIN_*` server-side | Deploy rules, test tenant isolation |
-| Firebase Storage | Required | Vehicle photos | Firebase Console | Private lead paths, size/type limits | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Deploy Storage rules, test denied cross-tenant reads |
+| Supabase Auth | Required | Account identity | Supabase Dashboard | Email provider, authorized domains | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Enable email auth, test verification/reset flows |
+| Supabase PostgreSQL | Required | Tenant data | Supabase Dashboard | SQL schema and RLS policies | `SUPABASE_SERVICE_ROLE_KEY` server-side | Run migrations, test tenant isolation |
+| Supabase Storage | Required | Vehicle photos | Supabase Dashboard | Private bucket and Storage policies | `NEXT_PUBLIC_SUPABASE_URL`, server key | Create private bucket, test signed URLs and denied cross-tenant reads |
 | AI provider | Optional for fallback | Photo assessment | Chosen provider | Structured JSON + timeout | `AI_PROVIDER_API_KEY` | Validate schema, rate-limit, monitor failure fallback |
 | Stripe | Required for paid plans | Billing | Stripe Dashboard | Products, prices, webhook | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, publishable key | Verify signatures and subscription state |
 | Transactional email | Required before launch | Lead/quote notices | Resend or Postmark | Verified sender/domain | `EMAIL_PROVIDER_API_KEY` | Verify domain and SPF/DKIM |
@@ -92,17 +96,17 @@ Choose one provider, verify a sending domain, and keep API calls server-side. AI
 2. Import it into Vercel with the root directory set to this project.
 3. Add every variable from `.env.example` in Preview and Production separately.
 4. Set the production branch and `NEXT_PUBLIC_APP_URL` to the final domain.
-5. Add the Vercel domain to Firebase Authentication authorized domains.
+5. Add the Vercel domain to Supabase Authentication redirect URLs.
 6. Configure the Stripe webhook URL and email sending domain.
 7. Run the smoke checks in [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md).
 
-Firebase Hosting is an optional alternative, not a requirement for the Vercel deployment described above.
+Vercel is the deployment target described above; Supabase hosts the backend services.
 
 ## Security checklist
 
 - [ ] Server-side ID token verification for every protected mutation
-- [ ] Firestore and Storage rules deployed from source control
-- [ ] Business membership checked on every tenant read/write
+- [ ] Supabase SQL migrations and RLS policies deployed from source control
+- [ ] Business membership checked by RLS on every tenant read/write
 - [ ] Zod validation on auth, profile, services, leads, AI output, and webhooks
 - [ ] Upload size, extension, MIME sniffing, count, and Storage path validation
 - [ ] Rate limits on public submissions, AI requests, auth-sensitive routes, and webhooks
@@ -113,9 +117,9 @@ Firebase Hosting is an optional alternative, not a requirement for the Vercel de
 
 ## Before you can launch
 
-- [ ] Replace the demo quote submit with an authenticated server route/Cloud Function.
-- [ ] Create the Firebase project, deploy rules, and test tenant isolation with two accounts.
+- [ ] Replace the demo quote submit with an authenticated Supabase server route.
+- [ ] Create the Supabase project, run migrations, and test tenant isolation with two accounts.
 - [ ] Connect real email, Stripe, AI, and rate-limit providers.
 - [ ] Finish auth screens and server session verification for the dashboard.
-- [ ] Run Playwright flows against a staging Firebase project.
+- [ ] Run Playwright flows against a staging Supabase project.
 - [ ] Review [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md) end to end.
