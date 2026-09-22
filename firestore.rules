@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function member(businessId) { return signedIn() && exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)); }
+    function owner(businessId) { return member(businessId) && get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)).data.role == 'owner'; }
+    function validBusinessId(businessId) { return request.resource.data.businessId == businessId; }
+
+    match /users/{uid} {
+      allow read, update: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
+    }
+    match /businesses/{businessId} {
+      allow read: if member(businessId);
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if owner(businessId);
+      allow delete: if false;
+      match /members/{uid} {
+        allow read: if member(businessId);
+        allow write: if owner(businessId);
+      }
+      match /services/{serviceId} {
+        allow read: if member(businessId) || resource.data.public == true;
+        allow create, update: if member(businessId) && validBusinessId(businessId);
+        allow delete: if owner(businessId);
+      }
+      match /leads/{leadId} {
+        allow read, update: if member(businessId);
+        allow create: if validBusinessId(businessId);
+        allow delete: if owner(businessId);
+      }
+      match /customers/{customerId} {
+        allow read, update: if member(businessId);
+        allow create: if member(businessId) && validBusinessId(businessId);
+        allow delete: if owner(businessId);
+      }
+      match /quotes/{quoteId} {
+        allow read, update: if member(businessId);
+        allow create: if member(businessId) && validBusinessId(businessId);
+        allow delete: if owner(businessId);
+      }
+      match /aiAssessments/{assessmentId} {
+        allow read: if member(businessId);
+        allow write: if false;
+      }
+    }
+  }
+}

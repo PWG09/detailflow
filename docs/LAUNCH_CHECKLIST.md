@@ -1,0 +1,25 @@
+# Launch checklist
+
+- [ ] Firebase project
+- [ ] Authentication and email verification
+- [ ] Firestore
+- [ ] Storage
+- [ ] Rules deployed and tested
+- [ ] Indexes deployed
+- [ ] App Check configured and monitored
+- [ ] AI provider configured or fallback explicitly enabled
+- [ ] Email provider account, sender, SPF, and DKIM
+- [ ] Stripe products and prices
+- [ ] Stripe webhook signature verification
+- [ ] Domain
+- [ ] DNS
+- [ ] Vercel project
+- [ ] Environment variables split by Preview and Production
+- [ ] Production build
+- [ ] Unit and Playwright tests
+- [ ] Security and tenant-isolation review
+- [ ] Privacy policy reviewed
+- [ ] Terms reviewed
+- [ ] Backup and export strategy
+- [ ] Monitoring and alerting
+- [ ] Production smoke test: registration, service creation, public quote, photo upload, lead view, quote send
