@@ -56,3 +56,5 @@ After saving variables, redeploy the project. Vercel does not apply changed envi
 9. Test the second account cannot read the first business.
 
 If login shows a permissions error, run `supabase/migrations/20260922000001_fix_rls_membership_lookup.sql` in SQL Editor after the initial migration. This repairs owner memberships created before the trigger and replaces the recursive membership lookup policies.
+
+If the browser still reports `403 Forbidden` for `business_members`, run `supabase/migrations/20260922000002_grant_authenticated_table_access.sql`. These are table-level grants; RLS remains enabled and continues to restrict rows by business membership.
