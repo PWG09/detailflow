@@ -5,7 +5,10 @@ import { publicQuoteSchema } from '@/lib/validation/public-quote';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  let stage = 'request';
   try {
+    if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) return NextResponse.json({ error: 'Please submit the quote form with its fields and photos.' }, { status: 400 });
+    stage = 'form';
     const formData = await request.formData();
     const parsed = publicQuoteSchema.safeParse({
       businessSlug: formData.get('businessSlug'),
@@ -22,15 +25,19 @@ export async function POST(request: Request) {
     if (!parsed.success) return NextResponse.json({ error: 'Please review the required quote details.' }, { status: 400 });
 
     const input = parsed.data;
+    stage = 'config';
     const supabase = createSupabaseAdminClient();
+    stage = 'business';
     const { data: business, error: businessError } = await supabase.from('businesses').select('id').eq('slug', input.businessSlug).maybeSingle();
     if (businessError) throw businessError;
     if (!business) return NextResponse.json({ error: 'This business quote link is not available.' }, { status: 404 });
 
+    stage = 'service';
     const { data: service, error: serviceError } = await supabase.from('services').select('id, minimum_price, maximum_price').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();
     if (serviceError) throw serviceError;
     if (!service) return NextResponse.json({ error: 'The selected service is no longer available.' }, { status: 400 });
 
+    stage = 'customer';
     const normalizedEmail = input.email.toLowerCase();
     const { data: customer, error: customerError } = await supabase.from('customers').upsert({
       business_id: business.id,
@@ -55,6 +62,7 @@ export async function POST(request: Request) {
       validatedPhotos.push({ bytes, isJpeg });
     }
 
+    stage = 'lead';
     const { data: lead, error: leadError } = await supabase.from('leads').insert({
       business_id: business.id,
       customer_id: customer.id,
@@ -66,6 +74,7 @@ export async function POST(request: Request) {
     }).select('id').single();
     if (leadError) throw leadError;
 
+    stage = 'storage';
     const photoPaths: string[] = [];
     for (const photo of validatedPhotos) {
       const extension = photo.isJpeg ? 'jpg' : 'png';
@@ -81,7 +90,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ leadId: lead.id, estimate: { minimum: service.minimum_price, maximum: service.maximum_price } }, { status: 201 });
   } catch (error) {
-    console.error('Public quote submission failed', error instanceof Error ? error.message : 'unknown error');
-    return NextResponse.json({ error: 'We could not submit your request. Please try again.' }, { status: 500 });
+    console.error('Public quote submission failed', { stage, message: error instanceof Error ? error.message : 'unknown error' });
+    return NextResponse.json({ error: `We could not submit your request (${stage}). Check the Supabase setup and try again.` }, { status: 500 });
   }
 }
