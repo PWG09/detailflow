@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       const extension = photo.isJpeg ? 'jpg' : 'png';
       const path = `${business.id}/leads/${lead.id}/${crypto.randomUUID()}.${extension}`;
       const { error: uploadError } = await supabase.storage.from('vehicle-photos').upload(path, photo.bytes, { contentType: photo.isJpeg ? 'image/jpeg' : 'image/png', upsert: false });
-      if (uploadError) return databaseFailure('photo upload', uploadError);
+      if (uploadError) return databaseFailure('photo upload', { code: 'storage' });
       photoPaths.push(path);
     }
     if (photoPaths.length > 0) {
