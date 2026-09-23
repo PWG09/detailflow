@@ -23,7 +23,14 @@ export default function LoginPage() {
     else if (registering) router.push('/onboarding');
     else {
       const { data: business, error: businessError } = await createSupabaseBrowserClient().from('businesses').select('id').limit(1).maybeSingle();
-      if (businessError) setMessage('Signed in, but we could not load your workspace. Please try again.');
+      if (businessError) {
+        const message = businessError.code === '42P01'
+          ? 'Your Supabase database is not initialized yet. Run the DetailFlow migration in SQL Editor.'
+          : businessError.code === '42501'
+            ? 'Your Supabase permissions are not ready. Check the Row Level Security policies.'
+            : `Signed in, but we could not load your workspace (${businessError.code || 'database error'}).`;
+        setMessage(message);
+      }
       else router.push(business ? '/dashboard' : '/onboarding');
     }
     setBusy(false);
