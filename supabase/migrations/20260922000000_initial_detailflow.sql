@@ -27,6 +27,19 @@ create table public.business_members (
   primary key (business_id, user_id)
 );
 
+create or replace function public.add_business_owner_membership()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.business_members (business_id, user_id, role)
+  values (new.id, new.owner_id, 'owner');
+  return new;
+end;
+$$;
+
+create trigger business_owner_membership_after_insert
+after insert on public.businesses
+for each row execute function public.add_business_owner_membership();
+
 create table public.services (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete cascade,

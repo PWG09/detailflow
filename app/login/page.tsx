@@ -1,0 +1,28 @@
+'use client';
+
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [registering, setRegistering] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setMessage('');
+    const supabase = createSupabaseBrowserClient();
+    const result = registering
+      ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/onboarding` } })
+      : await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) setMessage(result.error.message);
+    else if (registering && !result.data.session) setMessage('Check your email to verify your account, then return here to continue.');
+    else router.push(registering ? '/onboarding' : '/dashboard');
+    setBusy(false);
+  }
+
+  return <main className="auth-page"><div className="auth-panel"><a className="brand" href="/"><span className="brand-mark">DF</span> detailflow</a><div className="kicker"><span /> owner workspace</div><h1>{registering ? 'Create your account.' : 'Welcome back.'}</h1><p className="auth-copy">{registering ? 'Start with a clean intake process for your detailing business.' : 'Sign in to manage your leads, services, and quote flow.'}</p><form onSubmit={submit}><div className="field"><label htmlFor="email">Email</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div><div className="field"><label htmlFor="password">Password</label><input id="password" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></div>{message && <p role="alert" className="auth-message">{message}</p>}<button className="button-primary" type="submit" disabled={busy}>{busy ? 'Working...' : registering ? 'Create account' : 'Sign in'}</button></form><button className="auth-switch" type="button" onClick={() => { setRegistering(!registering); setMessage(''); }}>{registering ? 'Already have an account? Sign in' : 'New to DetailFlow? Create an account'}</button></div></main>;
+}
