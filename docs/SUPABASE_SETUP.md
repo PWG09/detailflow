@@ -54,3 +54,5 @@ After saving variables, redeploy the project. Vercel does not apply changed envi
 7. Confirm a customer and lead row appear in Supabase.
 8. Open Storage and confirm `vehicle-photos` is private.
 9. Test the second account cannot read the first business.
+
+If login shows a permissions error, run `supabase/migrations/20260922000001_fix_rls_membership_lookup.sql` in SQL Editor after the initial migration. This repairs owner memberships created before the trigger and replaces the recursive membership lookup policies.

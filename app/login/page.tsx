@@ -22,7 +22,7 @@ export default function LoginPage() {
     else if (registering && !result.data.session) setMessage('Check your email to verify your account, then return here to continue.');
     else if (registering) router.push('/onboarding');
     else {
-      const { data: business, error: businessError } = await createSupabaseBrowserClient().from('businesses').select('id').limit(1).maybeSingle();
+      const { data: membership, error: businessError } = await createSupabaseBrowserClient().from('business_members').select('business_id').limit(1).maybeSingle();
       if (businessError) {
         const message = businessError.code === '42P01'
           ? 'Your Supabase database is not initialized yet. Run the DetailFlow migration in SQL Editor.'
@@ -31,7 +31,7 @@ export default function LoginPage() {
             : `Signed in, but we could not load your workspace (${businessError.code || 'database error'}).`;
         setMessage(message);
       }
-      else router.push(business ? '/dashboard' : '/onboarding');
+      else router.push(membership ? '/dashboard' : '/onboarding');
     }
     setBusy(false);
   }
