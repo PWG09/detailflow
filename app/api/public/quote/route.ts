@@ -43,6 +43,18 @@ export async function POST(request: Request) {
     }, { onConflict: 'business_id,normalized_email' }).select('id').single();
     if (customerError) throw customerError;
 
+    const photos = formData.getAll('photos').filter((value): value is File => value instanceof File && value.size > 0);
+    if (photos.length > 8) return NextResponse.json({ error: 'Please upload no more than 8 photos.' }, { status: 400 });
+    const validatedPhotos: { bytes: Uint8Array; isJpeg: boolean }[] = [];
+    for (const photo of photos) {
+      if (photo.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'Each photo must be smaller than 10 MB.' }, { status: 400 });
+      const bytes = new Uint8Array(await photo.arrayBuffer());
+      const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+      const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+      if (!isJpeg && !isPng) return NextResponse.json({ error: 'Only valid JPG and PNG photos are accepted.' }, { status: 400 });
+      validatedPhotos.push({ bytes, isJpeg });
+    }
+
     const { data: lead, error: leadError } = await supabase.from('leads').insert({
       business_id: business.id,
       customer_id: customer.id,
@@ -53,6 +65,19 @@ export async function POST(request: Request) {
       source: 'public_quote',
     }).select('id').single();
     if (leadError) throw leadError;
+
+    const photoPaths: string[] = [];
+    for (const photo of validatedPhotos) {
+      const extension = photo.isJpeg ? 'jpg' : 'png';
+      const path = `${business.id}/leads/${lead.id}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('vehicle-photos').upload(path, photo.bytes, { contentType: photo.isJpeg ? 'image/jpeg' : 'image/png', upsert: false });
+      if (uploadError) throw uploadError;
+      photoPaths.push(path);
+    }
+    if (photoPaths.length > 0) {
+      const { error: photoUpdateError } = await supabase.from('leads').update({ photo_paths: photoPaths }).eq('id', lead.id);
+      if (photoUpdateError) throw photoUpdateError;
+    }
 
     return NextResponse.json({ leadId: lead.id, estimate: { minimum: service.minimum_price, maximum: service.maximum_price } }, { status: 201 });
   } catch (error) {
