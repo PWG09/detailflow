@@ -61,6 +61,8 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 The application uses Supabase Auth, PostgreSQL, Storage, and RLS. Firebase is not part of the active backend architecture.
 
+For the exact external setup and Foundation smoke test, read [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
+
 ## Data and authorization
 
 The data model is documented in [docs/DATABASE.md](docs/DATABASE.md). Every operational row contains a `business_id` and is protected by Supabase Row Level Security. Customer photos are private Storage objects under the business and lead path.

@@ -141,6 +141,32 @@ create policy "members update leads" on public.leads for update using (public.is
 create policy "members read quotes" on public.quotes for select using (public.is_business_member(business_id));
 create policy "members manage quotes" on public.quotes for all using (public.is_business_member(business_id)) with check (public.is_business_member(business_id));
 
+insert into storage.buckets (id, name, public)
+values ('vehicle-photos', 'vehicle-photos', false)
+on conflict (id) do update set public = false;
+
+create policy "members upload vehicle photos"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'vehicle-photos'
+  and public.is_business_member((storage.foldername(name))[1]::uuid)
+  and (storage.foldername(name))[2] = 'leads'
+);
+
+create policy "members read vehicle photos"
+on storage.objects for select to authenticated
+using (
+  bucket_id = 'vehicle-photos'
+  and public.is_business_member((storage.foldername(name))[1]::uuid)
+);
+
+create policy "members delete vehicle photos"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'vehicle-photos'
+  and public.is_business_member((storage.foldername(name))[1]::uuid)
+);
+
 revoke all on function public.is_business_member(uuid) from public;
 revoke all on function public.is_business_owner(uuid) from public;
 grant execute on function public.is_business_member(uuid), public.is_business_owner(uuid) to authenticated;

@@ -34,7 +34,7 @@ This checklist distinguishes code that exists from production work that is compl
 
 ## Public quote funnel
 
- [x] Server-side validated public quote submission endpoint
+- [x] Server-side validated public quote submission endpoint
 - [ ] Validate image count, size, MIME/content signature
 - [ ] Persist photo paths on the lead
 - [ ] Rate limit public submissions
