@@ -20,7 +20,12 @@ export default function LoginPage() {
       : await supabase.auth.signInWithPassword({ email, password });
     if (result.error) setMessage(result.error.message);
     else if (registering && !result.data.session) setMessage('Check your email to verify your account, then return here to continue.');
-    else router.push(registering ? '/onboarding' : '/dashboard');
+    else if (registering) router.push('/onboarding');
+    else {
+      const { data: business, error: businessError } = await createSupabaseBrowserClient().from('businesses').select('id').limit(1).maybeSingle();
+      if (businessError) setMessage('Signed in, but we could not load your workspace. Please try again.');
+      else router.push(business ? '/dashboard' : '/onboarding');
+    }
     setBusy(false);
   }
 
