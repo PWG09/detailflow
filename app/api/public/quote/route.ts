@@ -4,6 +4,14 @@ import { publicQuoteSchema } from '@/lib/validation/public-quote';
 
 export const runtime = 'nodejs';
 
+function databaseFailure(stage: string, error: { code?: string }) {
+  const code = error.code || 'database';
+  if (code === 'PGRST301' || code === '401') return NextResponse.json({ error: 'The server Supabase key is invalid or expired. Update SUPABASE_SERVICE_ROLE_KEY in Vercel and redeploy.' }, { status: 500 });
+  if (code === '42P01') return NextResponse.json({ error: `The Supabase table needed for ${stage} does not exist. Run the database migrations.` }, { status: 500 });
+  if (code === '42501') return NextResponse.json({ error: `Supabase denied the ${stage} query. Check the database grants and RLS policies.` }, { status: 500 });
+  return NextResponse.json({ error: `Supabase failed during ${stage} (${code}).` }, { status: 500 });
+}
+
 export async function POST(request: Request) {
   let stage = 'request';
   try {
@@ -29,12 +37,12 @@ export async function POST(request: Request) {
     const supabase = createSupabaseAdminClient();
     stage = 'business';
     const { data: business, error: businessError } = await supabase.from('businesses').select('id').eq('slug', input.businessSlug).maybeSingle();
-    if (businessError) throw businessError;
+    if (businessError) return databaseFailure('business lookup', businessError);
     if (!business) return NextResponse.json({ error: 'This business quote link is not available.' }, { status: 404 });
 
     stage = 'service';
     const { data: service, error: serviceError } = await supabase.from('services').select('id, minimum_price, maximum_price').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();
-    if (serviceError) throw serviceError;
+    if (serviceError) return databaseFailure('service lookup', serviceError);
     if (!service) return NextResponse.json({ error: 'The selected service is no longer available.' }, { status: 400 });
 
     stage = 'customer';
@@ -48,7 +56,7 @@ export async function POST(request: Request) {
       phone: input.phone,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'business_id,normalized_email' }).select('id').single();
-    if (customerError) throw customerError;
+    if (customerError) return databaseFailure('customer save', customerError);
 
     const photos = formData.getAll('photos').filter((value): value is File => value instanceof File && value.size > 0);
     if (photos.length > 8) return NextResponse.json({ error: 'Please upload no more than 8 photos.' }, { status: 400 });
@@ -72,7 +80,7 @@ export async function POST(request: Request) {
       estimate: { minimum: service.minimum_price, maximum: service.maximum_price, currency: 'USD' },
       source: 'public_quote',
     }).select('id').single();
-    if (leadError) throw leadError;
+    if (leadError) return databaseFailure('lead save', leadError);
 
     stage = 'storage';
     const photoPaths: string[] = [];
@@ -80,12 +88,12 @@ export async function POST(request: Request) {
       const extension = photo.isJpeg ? 'jpg' : 'png';
       const path = `${business.id}/leads/${lead.id}/${crypto.randomUUID()}.${extension}`;
       const { error: uploadError } = await supabase.storage.from('vehicle-photos').upload(path, photo.bytes, { contentType: photo.isJpeg ? 'image/jpeg' : 'image/png', upsert: false });
-      if (uploadError) throw uploadError;
+      if (uploadError) return databaseFailure('photo upload', uploadError);
       photoPaths.push(path);
     }
     if (photoPaths.length > 0) {
       const { error: photoUpdateError } = await supabase.from('leads').update({ photo_paths: photoPaths }).eq('id', lead.id);
-      if (photoUpdateError) throw photoUpdateError;
+      if (photoUpdateError) return databaseFailure('photo path save', photoUpdateError);
     }
 
     return NextResponse.json({ leadId: lead.id, estimate: { minimum: service.minimum_price, maximum: service.maximum_price } }, { status: 201 });
