@@ -1,14 +1,16 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Upload } from 'lucide-react';
 
-const services = [['Interior detail', '$150-220'], ['Exterior detail', '$120-180'], ['Full detail', '$250-350'], ['Ceramic coating', 'from $800']] as const;
+type Service = readonly [string, string];
 const vehicles = ['Sedan', 'SUV', 'Truck', 'Coupe', 'Van', 'Motorcycle'] as const;
 
 export default function QuotePage() {
   const params = useParams<{ businessSlug: string }>();
+  const [businessName, setBusinessName] = useState(params.businessSlug);
+  const [services, setServices] = useState<Service[]>([]);
   const [step, setStep] = useState(1);
   const [service, setService] = useState('Full detail');
   const [vehicleType, setVehicleType] = useState('SUV');
@@ -23,6 +25,19 @@ export default function QuotePage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+
+  useEffect(() => {
+    void fetch(`/api/public/resolve-business?slug=${encodeURIComponent(params.businessSlug)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => {
+        if (result?.name) setBusinessName(result.name);
+        if (result?.services) {
+          const loadedServices = result.services.map((item: { name: string; minimum_price: number; maximum_price: number }) => [item.name, `$${item.minimum_price}-${item.maximum_price}`] as const);
+          setServices(loadedServices);
+          if (loadedServices[0]) setService(loadedServices[0][0]);
+        }
+      });
+  }, [params.businessSlug]);
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -54,10 +69,10 @@ export default function QuotePage() {
     setSubmitting(false);
   }
 
-  if (submitted) return <main className="quote-page"><div className="shell quote-header"><a className="brand" href="/"><span className="brand-mark">DF</span> northline detailing</a></div><div className="shell" style={{ maxWidth: 720, paddingTop: 110, textAlign: 'center' }}><div className="brand-mark" style={{ margin: '0 auto', transform: 'none' }}><Check size={18} /></div><h1 style={{ fontSize: 55, margin: '25px auto 18px' }}>Request received.</h1><p className="form-intro" style={{ maxWidth: 410, margin: 'auto' }}>Thanks. Northline Detailing will review your vehicle details and get back to you shortly.</p><a href="/" className="button-primary" style={{ marginTop: 30 }}>Back to DetailFlow <ArrowRight size={15} /></a></div></main>;
+  if (submitted) return <main className="quote-page"><div className="shell quote-header"><a className="brand" href="/"><span className="brand-mark">DF</span> {businessName}</a></div><div className="shell" style={{ maxWidth: 720, paddingTop: 110, textAlign: 'center' }}><div className="brand-mark" style={{ margin: '0 auto', transform: 'none' }}><Check size={18} /></div><h1 style={{ fontSize: 55, margin: '25px auto 18px' }}>Request received.</h1><p className="form-intro" style={{ maxWidth: 410, margin: 'auto' }}>Thanks. {businessName} will review your vehicle details and get back to you shortly.</p><a href="/" className="button-primary" style={{ marginTop: 30 }}>Back to DetailFlow <ArrowRight size={15} /></a></div></main>;
 
   return <main className="quote-page">
-    <div className="shell quote-header"><a className="brand" href="/"><span className="brand-mark">DF</span> northline detailing</a></div>
+    <div className="shell quote-header"><a className="brand" href="/"><span className="brand-mark">DF</span> {businessName}</a></div>
     <div className="shell quote-layout">
       <aside className="quote-aside"><div className="kicker"><span /> free estimate</div><h1>What does your vehicle need?</h1><p>Tell us a little about the vehicle and we will put together a clear starting range. No pressure, no guesswork.</p><div className="quote-aside-foot">Typical response time<br /><strong style={{ color: 'var(--ink)' }}>under 2 hours</strong></div></aside>
       <section className="quote-form-wrap">

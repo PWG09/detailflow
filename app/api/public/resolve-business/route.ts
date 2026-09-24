@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: exactMatch, error: exactMatchError } = await supabase
     .from('businesses')
-    .select('slug')
+    .select('id, slug, name')
     .eq('slug', requestedSlug)
     .maybeSingle();
 
@@ -24,12 +24,13 @@ export async function GET(request: Request) {
   }
 
   if (exactMatch) {
-    return NextResponse.json({ slug: exactMatch.slug, redirect: false });
+    const { data: services } = await supabase.from('services').select('name, minimum_price, maximum_price').eq('business_id', exactMatch.id).eq('active', true).order('display_order');
+    return NextResponse.json({ slug: exactMatch.slug, name: exactMatch.name, services: services ?? [], redirect: false });
   }
 
   const { data: fallbackBusiness, error: fallbackError } = await supabase
     .from('businesses')
-    .select('slug')
+    .select('id, slug, name')
     .limit(1)
     .maybeSingle();
 
@@ -42,5 +43,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'No businesses are available yet.' }, { status: 404 });
   }
 
-  return NextResponse.json({ slug: fallbackBusiness.slug, redirect: true, requestedSlug });
+  const { data: services } = await supabase.from('services').select('name, minimum_price, maximum_price').eq('business_id', fallbackBusiness.id).eq('active', true).order('display_order');
+  return NextResponse.json({ slug: fallbackBusiness.slug, name: fallbackBusiness.name, services: services ?? [], redirect: true, requestedSlug });
 }
