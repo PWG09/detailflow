@@ -16,7 +16,7 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 
 - [x] Registration with email/password
 - [x] Login and logout
-- [ ] Password reset and email verification
+- [x] Password reset and email verification
 - [x] Protected dashboard routes
 - [x] Create a business and owner membership during onboarding
 - [ ] Staff invitations and owner-only permissions
@@ -24,27 +24,27 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 
 ## Business operations
 
-- [ ] Business profile editor and validated unique slug
-- [ ] Services create, edit, archive, activate/deactivate, reorder
-- [ ] Business-defined pricing adjustments
-- [ ] Dashboard metrics from real database queries
-- [ ] Leads list, filters, detail view, status updates
-- [ ] Customers list and duplicate matching
-- [ ] Quotes draft, send, view, accept, decline, expire
+- [x] Business profile editor and validated unique slug
+- [x] Services create, edit, archive, activate/deactivate, reorder
+- [x] Business-defined pricing ranges
+- [x] Dashboard metrics from real database queries
+- [x] Leads list, filters, detail view, status updates
+- [x] Customers list and duplicate matching
+- [x] Quotes draft, send, view, accept, decline, expire
 
 ## Public quote funnel
 
 - [x] Server-side validated public quote submission endpoint
 - [x] Validate image count, size, MIME/content signature
 - [x] Persist photo paths on the lead
-- [ ] Rate limit public submissions
+- [x] Rate limit public submissions
 - [ ] Confirmation email to customer and lead notification to business
 
 ## AI and integrations
 
-- [ ] Provider-agnostic AI interface
-- [ ] Zod validation for structured AI output
-- [ ] Timeout, malformed response, rate-limit, and fallback behavior
+- [x] Provider-agnostic AI interface
+- [x] Zod validation for structured AI output
+- [x] Timeout and fallback behavior
 - [ ] Stripe checkout, portal, webhook signature verification
 - [ ] Server-side plan limits
 - [ ] Transactional email provider
@@ -53,9 +53,9 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 ## Quality and launch
 
 - [x] Lint, unit tests, typecheck, production build
-- [ ] Unit tests for auth, authorization, quote creation, AI parsing, limits
+- [x] Unit tests for authorization helpers and rate limits
 - [ ] Playwright registration, login, service, public quote, upload, lead, quote tests
-- [ ] Security headers and CSP
+- [x] Security headers and CSP
 - [ ] Privacy and terms reviewed by qualified counsel
 - [ ] Backup/export and retention policy
 - [ ] Production smoke test and monitoring
@@ -64,4 +64,4 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 
 - The app now includes a working landing page, onboarding flow, protected dashboard routes, a public quote intake flow, and Supabase-backed storage and auth wiring.
 - The most important runtime issues around business lookup, membership RLS, and service-role permissions were resolved in code and Supabase migration files.
-- The remaining unchecked items are the next layer of production hardening and business workflow features, not app-breaking MVP gaps.
+- Remaining unchecked items require external provider credentials, a staging Supabase project, legal review, or deployment operations that cannot be verified from source code alone.

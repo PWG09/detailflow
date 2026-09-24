@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { publicQuoteSchema } from '@/lib/validation/public-quote';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,9 @@ function databaseFailure(stage: string, error: { code?: string }) {
 export async function POST(request: Request) {
   let stage = 'request';
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+    const rate = checkRateLimit(`public-quote:${ip}`);
+    if (!rate.allowed) return NextResponse.json({ error: 'Too many quote requests. Please try again later.' }, { status: 429, headers: { 'Retry-After': String(Math.ceil(rate.retryAfter / 1000)) } });
     if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) return NextResponse.json({ error: 'Please submit the quote form with its fields and photos.' }, { status: 400 });
     stage = 'form';
     const formData = await request.formData();

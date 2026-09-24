@@ -1,0 +1,7 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft, BarChart3 } from 'lucide-react';
+type Analytics = { leads: number; quotes: number; won: number; conversionRate: number };
+export default function AnalyticsPage() { const [data, setData] = useState<Analytics | null>(null); const [error, setError] = useState(''); useEffect(() => { void fetch('/api/dashboard/analytics').then((response) => response.ok ? response.json() : Promise.reject()).then(setData).catch(() => setError('Unable to load analytics.')); }, []); return <section className="dashboard-main"><Link href="/dashboard" className="button-secondary"><ArrowLeft size={15} /> Back to overview</Link><div className="dash-header" style={{ marginTop: 34 }}><div><span className="mono eyebrow">Performance</span><h1>Analytics</h1><p>Conversion data calculated from your real leads and quotes.</p></div></div>{error ? <div className="empty-state"><h2>{error}</h2></div> : !data ? <div className="empty-state"><p>Loading analytics...</p></div> : <><div className="dashboard-metrics"><div><span>Total leads</span><strong>{data.leads}</strong></div><div><span>Quotes</span><strong>{data.quotes}</strong></div><div><span>Won leads</span><strong>{data.won}</strong></div><div><span>Conversion rate</span><strong>{data.conversionRate}%</strong></div></div><div className="empty-state"><div className="empty-icon"><BarChart3 size={22} /></div><h2>Live workspace analytics</h2><p>These figures update from your current business records.</p></div></>}</section>; }

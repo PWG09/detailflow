@@ -11,7 +11,7 @@ DetailFlow is a quote funnel and lead workspace for automotive detailers. The fi
 - Vitest pricing coverage
 - Configuration-first environment variables in `.env.example`
 
-The UI is deployable, but external production services are intentionally not claimed as connected until their real credentials are supplied. The public demo route is a UI flow and should be connected to a server-side Supabase submission action before launch.
+The core application is connected to Supabase: authentication, business onboarding, services, public quote submission, private photos, customers, leads, and quote lifecycle management. External billing, email, AI, monitoring, and backup providers still require their production credentials and provider configuration.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`, `http://localhost:3000/quote/demo-detailing`, and `http://localhost:3000/dashboard`.
+Open `http://localhost:3000`, `http://localhost:3000/quote`, and `http://localhost:3000/dashboard` after signing in.
 
 Validation commands:
 
@@ -39,7 +39,7 @@ npm test
 npm run build
 ```
 
-`npm run lint` should be wired to the chosen ESLint flat-config command before production launch. Next build currently performs its own lint/type validation.
+`npm run lint` runs ESLint and `npm run build` performs the production compilation and type validation.
 
 ## Supabase setup
 
@@ -119,9 +119,9 @@ Vercel is the deployment target described above; Supabase hosts the backend serv
 
 ## Before you can launch
 
-- [ ] Replace the demo quote submit with an authenticated Supabase server route.
+- [x] Replace the demo quote submit with a server-side Supabase service-role route.
 - [ ] Create the Supabase project, run migrations, and test tenant isolation with two accounts.
 - [ ] Connect real email, Stripe, AI, and rate-limit providers.
-- [ ] Finish auth screens and server session verification for the dashboard.
+- [x] Finish password reset and server session verification for the dashboard.
 - [ ] Run Playwright flows against a staging Supabase project.
 - [ ] Review [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md) end to end.
