@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { isMembershipForUser } from '@/lib/business-membership';
 
 type AccountMode = 'owner' | 'customer';
 
@@ -31,7 +32,8 @@ export default function LoginPage() {
     else if (registering && !result.data.session) setMessage('Check your email to verify your account, then return here to continue.');
     else if (registering) router.push('/onboarding');
     else {
-      const { data: membership, error: businessError } = await createSupabaseBrowserClient().from('business_members').select('business_id').limit(1).maybeSingle();
+      const userId = result.data.user?.id ?? (await createSupabaseBrowserClient().auth.getUser()).data.user?.id;
+      const { data: membership, error: businessError } = await createSupabaseBrowserClient().from('business_members').select('business_id, user_id').eq('user_id', userId ?? '').maybeSingle();
       if (businessError) {
         const nextMessage = businessError.code === '42P01'
           ? 'Your Supabase database is not initialized yet. Run the DetailFlow migration in SQL Editor.'
@@ -40,7 +42,10 @@ export default function LoginPage() {
             : `Signed in, but we could not load your workspace (${businessError.code || 'database error'}).`;
         setMessage(nextMessage);
       }
-      else router.push(membership ? '/dashboard' : '/onboarding');
+      else {
+        const isOwnerMember = isMembershipForUser(membership, userId ?? null);
+        router.push(isOwnerMember ? '/dashboard' : '/onboarding');
+      }
     }
     setBusy(false);
   }
