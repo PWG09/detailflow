@@ -36,9 +36,18 @@ export async function POST(request: Request) {
     stage = 'config';
     const supabase = createSupabaseAdminClient();
     stage = 'business';
-    const { data: business, error: businessError } = await supabase.from('businesses').select('id').eq('slug', input.businessSlug).maybeSingle();
+    const requestedSlug = input.businessSlug.trim();
+    const { data: business, error: businessError } = await supabase.from('businesses').select('id, slug, name').eq('slug', requestedSlug).maybeSingle();
     if (businessError) return databaseFailure('business lookup', businessError);
-    if (!business) return NextResponse.json({ error: 'This business quote link is not available.' }, { status: 404 });
+    if (!business) {
+      const { data: nearbyBusinesses, error: lookupDebugError } = await supabase.from('businesses').select('slug, name').limit(20);
+      console.error('Public quote slug mismatch', {
+        requestedSlug,
+        nearbyBusinesses,
+        lookupDebugError: lookupDebugError?.message,
+      });
+      return NextResponse.json({ error: `This business quote link is not available for "${requestedSlug}". Check the public link slug in Supabase.` }, { status: 404 });
+    }
 
     stage = 'service';
     const { data: service, error: serviceError } = await supabase.from('services').select('id, minimum_price, maximum_price').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();

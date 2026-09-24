@@ -8,3 +8,4 @@ grant select, insert, update, delete on public.services to service_role;
 grant select, insert, update, delete on public.customers to service_role;
 grant select, insert, update, delete on public.leads to service_role;
 grant select, insert, update, delete on public.quotes to service_role;
+

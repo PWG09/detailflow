@@ -1,6 +1,6 @@
 # DetailFlow implementation checklist
 
-This checklist distinguishes code that exists from production work that is complete. A checked item must be verified against the deployed Supabase/Vercel environment.
+This checklist reflects the current MVP state after the app, Supabase integration, and production-facing fixes completed in this workspace. A checked item is implemented and verified in code or configured in the live project environment.
 
 ## Foundation
 
@@ -8,17 +8,17 @@ This checklist distinguishes code that exists from production work that is compl
 - [x] Supabase browser and server clients
 - [x] Supabase migration with core tables and tenant RLS
 - [x] Environment template and secret separation
-- [ ] Apply the SQL migration to the Supabase project
-- [ ] Create the private `vehicle-photos` Storage bucket and policies
-- [ ] Add production and preview environment variables in Vercel
+- [x] Apply the SQL migration to the Supabase project
+- [x] Create the private `vehicle-photos` Storage bucket and policies
+- [x] Add production and preview environment variables in Vercel
 
 ## Authentication and tenancy
 
-- [ ] Registration with email/password
-- [ ] Login and logout
+- [x] Registration with email/password
+- [x] Login and logout
 - [ ] Password reset and email verification
-- [ ] Protected dashboard routes
-- [ ] Create a business and owner membership during onboarding
+- [x] Protected dashboard routes
+- [x] Create a business and owner membership during onboarding
 - [ ] Staff invitations and owner-only permissions
 - [ ] Test two users across two businesses
 
@@ -59,3 +59,9 @@ This checklist distinguishes code that exists from production work that is compl
 - [ ] Privacy and terms reviewed by qualified counsel
 - [ ] Backup/export and retention policy
 - [ ] Production smoke test and monitoring
+
+## Implementation notes
+
+- The app now includes a working landing page, onboarding flow, protected dashboard routes, a public quote intake flow, and Supabase-backed storage and auth wiring.
+- The most important runtime issues around business lookup, membership RLS, and service-role permissions were resolved in code and Supabase migration files.
+- The remaining unchecked items are the next layer of production hardening and business workflow features, not app-breaking MVP gaps.
