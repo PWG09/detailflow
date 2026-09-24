@@ -1,2 +1,2 @@
 import type { MetadataRoute } from 'next';
-export default function sitemap(): MetadataRoute.Sitemap { const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; return [{ url: base }, { url: `${base}/quote/demo-detailing` }, { url: `${base}/privacy` }, { url: `${base}/terms` }]; }
+export default function sitemap(): MetadataRoute.Sitemap { const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; return [{ url: base }, { url: `${base}/quote` }, { url: `${base}/privacy` }, { url: `${base}/terms` }]; }
