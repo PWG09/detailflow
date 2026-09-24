@@ -1,19 +1,8 @@
 import { redirect } from 'next/navigation';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { isMembershipForUser } from '@/lib/business-membership';
 
 export default async function QuoteIndexPage() {
   try {
-    const supabase = await createSupabaseServerClient();
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData.user) {
-      const { data: membership } = await supabase.from('business_members').select('business_id, user_id').eq('user_id', userData.user.id).maybeSingle();
-      if (isMembershipForUser(membership, userData.user.id)) {
-        redirect('/dashboard');
-      }
-    }
-
     const admin = createSupabaseAdminClient();
     const { data } = await admin.from('businesses').select('slug').order('created_at', { ascending: false }).limit(1).maybeSingle();
 
