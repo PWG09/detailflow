@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'You must be signed in.' }, { status: 401 });
     const parsed = businessSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: 'Use a valid business name and public link.' }, { status: 400 });
-    const { data: existing } = await supabase.from('businesses').select('id, slug').limit(1).maybeSingle();
+    const { data: existing } = await supabase.from('businesses').select('id, slug').eq('owner_id', user.id).limit(1).maybeSingle();
     if (existing) return NextResponse.json(existing, { status: 200 });
     const { data, error } = await supabase.from('businesses').insert({ owner_id: user.id, name: parsed.data.name, slug: parsed.data.slug, email: parsed.data.email, phone: parsed.data.phone, description: parsed.data.description }).select('id, slug').single();
     if (error?.code === '23505') return NextResponse.json({ error: 'That public link is already taken.' }, { status: 409 });
