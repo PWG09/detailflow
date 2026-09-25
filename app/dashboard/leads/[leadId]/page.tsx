@@ -50,9 +50,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
   if (error || !data) {
     return (
       <section className="dashboard-main">
-        <Link href="/dashboard/leads" className="button-secondary">
-          <ArrowLeft size={15} /> Back to leads
-        </Link>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Link href="/dashboard" className="button-secondary">
+            <ArrowLeft size={15} /> Back to dashboard
+          </Link>
+          <Link href="/dashboard/leads" className="button-secondary">
+            <ArrowLeft size={15} /> Back to leads
+          </Link>
+        </div>
         <div className="empty-state" style={{ marginTop: 24 }}>
           <div className="empty-icon"><ClipboardList size={22} /></div>
           <h2>Lead not found.</h2>
@@ -87,11 +92,16 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
 
   return (
     <section className="dashboard-main">
-      <Link href="/dashboard/leads" className="button-secondary">
-        <ArrowLeft size={15} /> Back to leads
-      </Link>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <Link href="/dashboard" className="button-secondary">
+          <ArrowLeft size={15} /> Back to dashboard
+        </Link>
+        <Link href="/dashboard/leads" className="button-secondary">
+          <ArrowLeft size={15} /> Back to leads
+        </Link>
+      </div>
 
-      <div className="dash-header" style={{ marginTop: 34 }}>
+      <div className="dash-header" style={{ marginTop: 24 }}>
         <div>
           <span className="mono eyebrow">Lead detail</span>
           <h1>{vehicle?.year ?? 'Vehicle'} {vehicle?.makeModel ?? 'request'}</h1>
