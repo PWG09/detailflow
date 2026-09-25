@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { publicQuoteSchema } from '@/lib/validation/public-quote';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { FREE_LEAD_LIMIT, isPro } from '@/lib/entitlements';
+import { assessVehicle } from '@/lib/ai';
+import { sendEmail, emailShell } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
     const supabase = createSupabaseAdminClient();
     stage = 'business';
     const requestedSlug = input.businessSlug.trim();
-    const { data: business, error: businessError } = await supabase.from('businesses').select('id, slug, name').eq('slug', requestedSlug).maybeSingle();
+    const { data: business, error: businessError } = await supabase.from('businesses').select('id, slug, name, email, plan').eq('slug', requestedSlug).maybeSingle();
     if (businessError) return databaseFailure('business lookup', businessError);
     if (!business) {
       const { data: nearbyBusinesses, error: lookupDebugError } = await supabase.from('businesses').select('slug, name').limit(20);
@@ -57,6 +60,12 @@ export async function POST(request: Request) {
     const { data: service, error: serviceError } = await supabase.from('services').select('id, minimum_price, maximum_price').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();
     if (serviceError) return databaseFailure('service lookup', serviceError);
     if (!service) return NextResponse.json({ error: 'The selected service is no longer available.' }, { status: 400 });
+
+    if (!isPro(business.plan)) {
+      const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
+      const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', business.id).gte('created_at', monthStart.toISOString()).neq('status', 'archived');
+      if ((count ?? 0) >= FREE_LEAD_LIMIT) return NextResponse.json({ error: 'This business has reached its monthly quote-request limit. Please contact the business directly.' }, { status: 429 });
+    }
 
     stage = 'customer';
     const normalizedEmail = input.email.toLowerCase();
@@ -104,12 +113,44 @@ export async function POST(request: Request) {
       if (uploadError) return databaseFailure('photo upload', { code: 'storage' });
       photoPaths.push(path);
     }
+
+    // Persist the uploaded storage paths on the lead. The AI dashboard route
+    // reads leads.photo_paths later; without this update, the photos exist in
+    // Storage but the lead appears to have no photos.
     if (photoPaths.length > 0) {
-      const { error: photoUpdateError } = await supabase.from('leads').update({ photo_paths: photoPaths }).eq('id', lead.id);
-      if (photoUpdateError) return databaseFailure('photo path save', photoUpdateError);
+      const { data: savedLead, error: photoPathError } = await supabase
+        .from('leads')
+        .update({ photo_paths: photoPaths, updated_at: new Date().toISOString() })
+        .eq('id', lead.id)
+        .eq('business_id', business.id)
+        .select('id,photo_paths')
+        .single();
+      if (photoPathError) {
+        console.error('Lead photo path save failed', { leadId: lead.id, photoPaths, code: photoPathError.code, message: photoPathError.message });
+        return databaseFailure('photo path save', photoPathError);
+      }
+      if (!savedLead?.photo_paths?.length) {
+        console.error('Lead photo path save returned no paths', { leadId: lead.id, photoPaths });
+        return NextResponse.json({ error: 'Photos uploaded but could not be attached to the lead.' }, { status: 500 });
+      }
     }
 
-    return NextResponse.json({ leadId: lead.id, estimate: { minimum: service.minimum_price, maximum: service.maximum_price } }, { status: 201 });
+    let aiAssessment = null;
+    if (photoPaths.length > 0 && isPro(business.plan)) {
+      aiAssessment = await assessVehicle(validatedPhotos.map((photo) => photo.bytes));
+      await supabase.from('leads').update({ ai_assessment: aiAssessment, ai_assessed_at: new Date().toISOString() }).eq('id', lead.id);
+    }
+
+    const estimate = { minimum: service.minimum_price, maximum: service.maximum_price, currency: 'USD' };
+    const businessEmail = business.email;
+    if (input.email) {
+      try { await sendEmail({ to: input.email, subject: `Quote request received — ${business.name}`, html: emailShell('Request received', `<p>Hi ${input.firstName},</p><p>Your quote request for <strong>${input.year} ${input.makeModel}</strong> was sent to ${business.name}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>The business will review your request and contact you with the next step.</p>`) }); } catch (error) { console.error('Customer confirmation email failed', error); }
+    }
+    if (businessEmail) {
+      try { await sendEmail({ to: businessEmail, subject: `New quote request — ${input.firstName} ${input.lastName}`, html: emailShell('New quote request', `<p><strong>${input.firstName} ${input.lastName}</strong> requested ${input.serviceName} for ${input.year} ${input.makeModel}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>Lead ID: ${lead.id}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
+    }
+
+    return NextResponse.json({ leadId: lead.id, estimate, aiAssessment }, { status: 201 });
   } catch (error) {
     console.error('Public quote submission failed', { stage, message: error instanceof Error ? error.message : 'unknown error' });
     return NextResponse.json({ error: `We could not submit your request (${stage}). Check the Supabase setup and try again.` }, { status: 500 });

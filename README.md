@@ -125,3 +125,9 @@ Vercel is the deployment target described above; Supabase hosts the backend serv
 - [x] Finish password reset and server session verification for the dashboard.
 - [ ] Run Playwright flows against a staging Supabase project.
 - [ ] Review [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md) end to end.
+
+## Production completion notes
+
+The completed build includes production-oriented billing entitlements, Stripe subscription lifecycle handling, customer/business email notifications through Resend, configurable OpenAI-compatible vision AI, Pro AI limits, team invitations, audit logs, data export, cookie consent, lead lifecycle timestamps, stronger upload validation, and deployment documentation.
+
+See `docs/DEPLOYMENT_FINAL.md` before deploying. Secrets are intentionally excluded from the project archive.

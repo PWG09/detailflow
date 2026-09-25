@@ -45,7 +45,8 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 - [x] Provider-agnostic AI interface
 - [x] Zod validation for structured AI output
 - [x] Timeout and fallback behavior
-- [ ] Stripe checkout, portal, webhook signature verification
+- [x] Stripe Checkout and webhook signature verification
+- [ ] Stripe customer portal and production payment smoke test
 - [ ] Server-side plan limits
 - [ ] Transactional email provider
 - [ ] Production-safe logging and optional Sentry

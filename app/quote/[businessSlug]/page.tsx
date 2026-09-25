@@ -18,6 +18,7 @@ export default function QuotePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [year, setYear] = useState('');
   const [makeModel, setMakeModel] = useState('');
   const [condition, setCondition] = useState('');
@@ -41,8 +42,11 @@ export default function QuotePage() {
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    setPhotoNames(files.slice(0, 8).map((file) => file.name));
+    const selected = files.slice(0, 8);
+    setPhotoFiles(selected);
+    setPhotoNames(selected.map((file) => file.name));
     if (files.length > 8) setError('Please select no more than 8 photos.');
+    else if (selected.length === 0) setError('Please select at least one vehicle photo.');
     else setError('');
   }
 
@@ -60,6 +64,16 @@ export default function QuotePage() {
     formData.set('lastName', lastName);
     formData.set('email', email);
     formData.set('phone', phone);
+    // The file input is conditionally rendered in this multi-step form.
+    // Append the selected File objects explicitly so they are always sent to
+    // the server even if the input has been remounted between steps.
+    formData.delete('photos');
+    for (const file of photoFiles) formData.append('photos', file, file.name);
+    if (photoFiles.length === 0) {
+      setError('Please upload at least one vehicle photo.');
+      setSubmitting(false);
+      return;
+    }
     const response = await fetch('/api/public/quote', { method: 'POST', body: formData });
     if (response.ok) setSubmitted(true);
     else {
