@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getAppUrl, getStripe } from '@/lib/stripe';
+import Stripe from 'stripe';
 export const runtime='nodejs';
 const planSchema=z.object({plan:z.enum(['pro','business'])});
 async function ctx(){const supabase=await createSupabaseServerClient();const {data:{user}}=await supabase.auth.getUser();if(!user)return null;const {data:m}=await supabase.from('business_members').select('business_id,role').eq('user_id',user.id).limit(1).maybeSingle();return m?{supabase,user,m}:null;}
