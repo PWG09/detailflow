@@ -11,6 +11,7 @@ export const publicQuoteSchema = z.object({
   makeModel: z.string().trim().min(2).max(120),
   vehicleType: z.enum(['Sedan', 'SUV', 'Truck', 'Coupe', 'Van', 'Motorcycle', 'Other']),
   condition: z.string().trim().max(2000).default(''),
+  consent: z.literal('true'),
 });
 
 export type PublicQuoteInput = z.infer<typeof publicQuoteSchema>;

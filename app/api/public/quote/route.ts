@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { publicQuoteSchema } from '@/lib/validation/public-quote';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { FREE_LEAD_LIMIT, isPro } from '@/lib/entitlements';
+import { isPro, monthlyLeadLimit } from '@/lib/entitlements';
 import { assessVehicle } from '@/lib/ai';
 import { sendEmail, emailShell } from '@/lib/email';
 
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       makeModel: formData.get('makeModel'),
       vehicleType: formData.get('vehicleType'),
       condition: formData.get('condition') ?? '',
+      consent: formData.get('consent') ?? 'false',
     });
     if (!parsed.success) return NextResponse.json({ error: 'Please review the required quote details.' }, { status: 400 });
 
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     if (!isPro(business.plan)) {
       const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
       const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', business.id).gte('created_at', monthStart.toISOString()).neq('status', 'archived');
-      if ((count ?? 0) >= FREE_LEAD_LIMIT) return NextResponse.json({ error: 'This business has reached its monthly quote-request limit. Please contact the business directly.' }, { status: 429 });
+      if ((count ?? 0) >= monthlyLeadLimit(business.plan)) return NextResponse.json({ error: 'This business has reached its monthly quote-request limit. Please contact the business directly.' }, { status: 429 });
     }
 
     stage = 'customer';

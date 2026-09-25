@@ -66,3 +66,12 @@ This checklist reflects the current MVP state after the app, Supabase integratio
 - The app now includes a working landing page, onboarding flow, protected dashboard routes, a public quote intake flow, and Supabase-backed storage and auth wiring.
 - The most important runtime issues around business lookup, membership RLS, and service-role permissions were resolved in code and Supabase migration files.
 - Remaining unchecked items require external provider credentials, a staging Supabase project, legal review, or deployment operations that cannot be verified from source code alone.
+
+## Security/UX additions implemented
+- Subscription cancellation endpoint with Stripe `cancel_at_period_end`.
+- Account deletion workflow for workspace owners with confirmation and server-side authorization.
+- Public quote privacy/terms consent validated by Zod on the server.
+- Stripe Price amounts loaded server-side for accurate membership display.
+- Stripe idempotency keys for subscription and quote Checkout creation.
+- Pro → Business subscription change updates the existing Stripe subscription.
+- Webhook handling for expired Checkout Sessions and payment disputes.
