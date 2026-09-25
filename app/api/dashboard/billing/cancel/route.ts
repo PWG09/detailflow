@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
+import Stripe from 'stripe';
 
 export const runtime = 'nodejs';
 
@@ -19,8 +20,7 @@ export async function POST() {
   if (!business?.stripe_subscription_id) return NextResponse.json({ error: 'No active Stripe subscription was found.' }, { status: 400 });
 
   try {
-    const subscriptionResponse = await getStripe().subscriptions.update(business.stripe_subscription_id, { cancel_at_period_end: true });
-    const subscription = subscriptionResponse.data;
+    const subscription = await getStripe().subscriptions.update(business.stripe_subscription_id, { cancel_at_period_end: true });
     await supabase.from('subscriptions').update({
       cancel_at_period_end: true,
       status: subscription.status,
