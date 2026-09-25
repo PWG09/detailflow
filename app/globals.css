@@ -31,7 +31,7 @@ h1 { font-size:clamp(48px,6.4vw,82px); line-height:.98; letter-spacing:-.075em; 
 .floating-card h3 { font-size:21px; margin:15px 0 8px; letter-spacing:-.04em; }
 .floating-card p { font-size:12px; color:var(--muted); margin:0; line-height:1.5; }
 .section { padding:112px 0; border-top:1px solid var(--line); }
-.section-head { display:flex; justify-content:space-between; align-items:end; margin-bottom:40px; gap:28px; }
+.section-head { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:40px; gap:28px; }
 .section h2 { font-size:clamp(32px,4vw,53px); letter-spacing:-.065em; line-height:1; margin:16px 0 0; max-width:520px; }
 .section-intro { max-width:300px; color:var(--muted); line-height:1.6; font-size:14px; }
 .steps { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); }

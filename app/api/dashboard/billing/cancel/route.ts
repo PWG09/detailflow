@@ -19,7 +19,8 @@ export async function POST() {
   if (!business?.stripe_subscription_id) return NextResponse.json({ error: 'No active Stripe subscription was found.' }, { status: 400 });
 
   try {
-    const subscription = await getStripe().subscriptions.update(business.stripe_subscription_id, { cancel_at_period_end: true });
+    const subscriptionResponse = await getStripe().subscriptions.update(business.stripe_subscription_id, { cancel_at_period_end: true });
+    const subscription = subscriptionResponse.data;
     await supabase.from('subscriptions').update({
       cancel_at_period_end: true,
       status: subscription.status,
