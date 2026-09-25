@@ -24,16 +24,31 @@ export async function POST() {
       business.stripe_subscription_id,
       { cancel_at_period_end: true }
     )) as unknown as Stripe.Subscription;
-    await supabase.from('subscriptions').update({
+    // Stripe's newer API versions moved the billing period from Subscription
+    // to SubscriptionItem. Use the first recurring item for a normal single-plan
+    // DetailFlow membership.
+    const subscriptionItem = subscription.items.data[0];
+    const currentPeriodEnd = subscriptionItem?.current_period_end ?? null;
+    const currentPeriodEndIso = currentPeriodEnd
+      ? new Date(currentPeriodEnd * 1000).toISOString()
+      : null;
+
+    const { error: syncError } = await supabase.from('subscriptions').update({
       cancel_at_period_end: true,
       status: subscription.status,
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_end: currentPeriodEndIso,
       updated_at: new Date().toISOString(),
     }).eq('business_id', membership.business_id);
+
+    if (syncError) {
+      console.error('Subscription cancellation database sync failed:', syncError.message);
+      return NextResponse.json({ error: 'Stripe cancellation succeeded, but the workspace billing record could not be synchronized.' }, { status: 500 });
+    }
+
     return NextResponse.json({
       ok: true,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+      currentPeriodEnd: currentPeriodEndIso,
     });
   } catch (error) {
     console.error('Stripe subscription cancellation failed:', error instanceof Error ? error.message : 'unknown');
