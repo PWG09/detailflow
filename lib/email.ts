@@ -1,7 +1,7 @@
 export type EmailMessage = { to: string; subject: string; html: string; text?: string };
 
-export function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
+export function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
 }
 
 export async function sendEmail(message: EmailMessage) {
