@@ -1,5 +1,25 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-export const metadata: Metadata = { title: 'FAQ | DetailFlow', description: 'Answers about DetailFlow quotes, payments, AI, and workspaces.' };
-const faqs=[['Can I use my own services and prices?','Yes. Workspace owners manage their service names, pricing ranges, and photo requirements from the dashboard.'],['Can customers pay through Stripe?','Yes. Customers pay securely through Stripe Checkout, and the business receives its payout through Stripe Connect after completing Stripe onboarding.'],['Where do submitted requests appear?','Public quote requests become leads in the business workspace, with customer details, vehicle information, photos, and optional AI assessment.'],['Does DetailFlow store card numbers?','No. Checkout is handled by Stripe. DetailFlow stores payment and subscription identifiers needed to reconcile the workflow.'],['Is the AI decision-maker?','No. AI assessment is assistive. The business remains responsible for reviewing the vehicle and deciding pricing and service.']];
-export default function FAQ(){return <main className="shell section"><Link href="/" className="brand"><span className="brand-mark">DF</span> detailflow</Link><div className="kicker" style={{marginTop:60}}><span/> faq</div><h1>Questions, answered.</h1><div style={{maxWidth:820,marginTop:35}}>{faqs.map(([q,a])=><article key={q} className="faq-item" style={{display:'block',padding:'24px 0'}}><h2 style={{fontSize:22,marginBottom:8}}>{q}</h2><p className="form-intro">{a}</p></article>)}</div></main>}
+import FaqAccordion from '@/app/components/FaqAccordion';
+
+export const metadata: Metadata = {
+  title: 'FAQ | DetailFlow',
+  description: 'Answers about DetailFlow quotes, payments, leads, AI, and business workspaces.',
+};
+
+export default function FAQ() {
+  return (
+    <main className="shell section">
+      <Link href="/" className="brand">
+        <span className="brand-mark">DF</span> detailflow
+      </Link>
+
+      <div className="kicker" style={{ marginTop: 60 }}><span /> faq</div>
+      <h1>Questions, answered.</h1>
+
+      <div style={{ maxWidth: 820, marginTop: 35 }}>
+        <FaqAccordion />
+      </div>
+    </main>
+  );
+}
