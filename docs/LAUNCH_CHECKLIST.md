@@ -135,7 +135,7 @@ Do not label the application production-ready until the relevant items above hav
 - [ ] Verify uploaded files are size/count/type/magic-byte validated and stored privately.
 - [ ] Verify SQL is never built by string concatenation from user input.
 - [ ] Verify secret values never appear in client bundles, source, logs, or error responses.
-- [ ] Verify Stripe direct test payments are disabled in live mode and Connect is required for real payouts.
+- [ ] Verify production uses `sk_live_...`, Live-mode Price IDs, the Live webhook secret, and Stripe Connect for customer payouts.
 
 ## Product realism checklist
 - [x] Custom 404 page

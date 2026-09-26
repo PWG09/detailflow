@@ -11,6 +11,7 @@ button { cursor:pointer; }
 .nav { display:flex; align-items:center; justify-content:space-between; height:82px; border-bottom:1px solid rgba(32,35,33,.14); }
 .brand { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.04em; font-size:20px; }
 .brand-mark { width:28px; height:28px; background:var(--orange); display:grid; place-items:center; color:white; font-family:'DM Mono'; font-size:13px; transform:rotate(-4deg); }
+.brand .brand-mark { width:32px; height:32px; flex:0 0 32px; background:transparent url('/detailflow-mark.png') center / contain no-repeat; display:block; color:transparent; font-size:0; transform:none; }
 .nav-links { display:flex; align-items:center; gap:28px; font-size:13px; color:#5c625e; }
 .nav-cta, .button-primary { background:var(--ink); color:#fff; border:0; padding:13px 18px; font-weight:700; border-radius:3px; display:inline-flex; align-items:center; gap:8px; }
 .nav-cta { background:var(--orange); }

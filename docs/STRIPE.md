@@ -47,46 +47,17 @@ Never trust billing state from the browser. Verify webhook signatures and record
 
 Never expose `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET`.
 
-## Production/Test verification
+## Production verification
 
-### Memberships
-1. Create the Pro recurring Price in Stripe and put its `price_...` ID in `STRIPE_PRO_PRICE_ID`.
-2. Create the Business recurring Price and put its `price_...` ID in `STRIPE_BUSINESS_PRICE_ID`.
-3. In Stripe Customer Portal settings, allow customers to update/cancel subscriptions and view invoices.
-4. In Test mode, subscribe to Pro with Stripe test card `4242 4242 4242 4242` and any future expiry/CVC.
-5. Confirm Stripe shows the Checkout Session and subscription, then confirm the DetailFlow workspace changes to `pro` only after the webhook is received.
-6. Use the portal to cancel at period end. Confirm `cancel_at_period_end` is true in Stripe and the app continues showing the paid plan until Stripe reports the final cancellation.
-7. Test Pro → Business using the app. The existing subscription should be updated instead of creating a second subscription.
+DetailFlow is configured for live Stripe processing in production. The production server rejects `sk_test_` keys.
 
-### Customer quote payments / Connect
-1. In Stripe Test mode, enable Connect and use Express connected accounts.
-2. Complete onboarding for a DetailFlow business until `charges_enabled=true` and `payouts_enabled=true`.
-3. Accept a quote and open the public payment flow.
-4. Pay with `4242 4242 4242 4242`.
-5. Confirm the PaymentIntent/Checkout Session contains the quote/business metadata and destination charge.
-6. Confirm the platform application fee equals the configured `platform_fee_percent` and the connected account receives the remainder.
-7. Confirm the Stripe webhook changes the quote to `paid` and creates a `stripe_events` record.
-8. Send the same webhook event again and confirm the endpoint returns `duplicate:true` without changing the record twice.
-9. Test a refund in Stripe and confirm the quote becomes `refunded`.
-10. Test a dispute event in Test mode and confirm the quote becomes `disputed`.
-11. Test an expired Checkout Session and confirm a pending quote returns to `failed`.
+1. Create the Pro and Business recurring Prices in Stripe **Live mode** and configure their live `price_...` IDs in Vercel.
+2. Configure `STRIPE_SECRET_KEY` with the live `sk_live_...` key.
+3. Configure `STRIPE_WEBHOOK_SECRET` from the **Live mode** webhook endpoint.
+4. Configure Stripe Connect in Live mode and complete onboarding for each business that will receive customer payments.
+5. Verify the connected account has charges and payouts enabled before sending a quote payment link.
+6. Run a real low-value production payment and verify the quote changes to `paid`, the payment is visible in Stripe, and the connected business receives the expected payout after Stripe fees and the configured DetailFlow application fee.
+7. Use the Stripe Billing Portal for subscription management and verify cancellation state is synchronized by webhooks.
+8. Confirm failed payments, refunds, disputes, expired Checkout Sessions, and subscription status changes are reflected in DetailFlow.
 
-### Webhook endpoint
-Production endpoint:
-`https://detailflow-two.vercel.app/api/stripe/webhook`
-
-Configure these event types on the **platform** webhook endpoint:
-- `checkout.session.completed`
-- `checkout.session.async_payment_succeeded`
-- `checkout.session.async_payment_failed`
-- `checkout.session.expired`
-- `customer.subscription.created`
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
-- `invoice.paid`
-- `invoice.payment_failed`
-- `account.updated`
-- `charge.refunded`
-- `charge.dispute.created`
-
-For Connect, make sure the webhook endpoint is configured to receive events from connected accounts as required by your Stripe Connect setup.
+Never place Stripe secret keys in browser code, Git, or public environment variables.

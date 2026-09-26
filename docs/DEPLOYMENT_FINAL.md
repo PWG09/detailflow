@@ -69,3 +69,8 @@ Authorization regression test: create two businesses, submit through Business A'
 ## Canonical customer lead link
 
 After onboarding, share `https://YOUR_DOMAIN/{business-slug}/lead`. The dashboard Settings page exposes the exact link with Copy, Share, and Open actions. Every submitted lead is assigned server-side to the business represented by that slug. Apply migration `20260926000000_public_lead_link_hardening.sql` before launch.
+
+
+## Stripe production mode
+
+Production deployments require a live Stripe secret (`sk_live_...`). Configure Live-mode Price IDs and the Live webhook signing secret in Vercel. Customer quote payments are Connect payments only; DetailFlow does not expose a direct platform test-payment path in production.

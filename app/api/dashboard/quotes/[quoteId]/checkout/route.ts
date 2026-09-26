@@ -21,23 +21,14 @@ export async function POST(_request:Request,{params}:{params:Promise<{quoteId:st
  const currency=(business?.currency||'USD').toLowerCase();
  if(!process.env.STRIPE_SECRET_KEY)return NextResponse.json({error:'Stripe payments are not configured.'},{status:503});
  const allowedCurrencies=new Set(['usd','cad','eur','gbp','aud','nzd']);if(!allowedCurrencies.has(currency))return NextResponse.json({error:`Unsupported payment currency: ${currency.toUpperCase()}.`},{status:400});
- // Test mode can intentionally process quote payments on the DetailFlow platform account
- // without Stripe Connect. This is useful for validating Checkout/webhooks before onboarding
- // a real detailer. Never enable direct platform payments for live production funds.
- const stripeTestMode=process.env.STRIPE_SECRET_KEY.startsWith('sk_test_');
- const directTestPayments=process.env.STRIPE_DIRECT_TEST_PAYMENTS==='true' && stripeTestMode;
- if(!directTestPayments && (!business?.stripe_connected_account_id||!business.stripe_charges_enabled||!business.stripe_payouts_enabled))return NextResponse.json({error:'This business has not finished connecting Stripe. The business owner must connect and verify Stripe before customers can pay.'},{status:409});
+ if(!business?.stripe_connected_account_id||!business.stripe_charges_enabled||!business.stripe_payouts_enabled)return NextResponse.json({error:'This business has not finished connecting Stripe. The business owner must connect and verify Stripe before customers can pay.'},{status:409});
  const feePercent=Math.min(100,Math.max(0,Number(business.platform_fee_percent??process.env.STRIPE_APPLICATION_FEE_PERCENT??2.5)));const fee=Math.min(amount,Math.round(amount*feePercent/100));
  try{
   const stripe=getStripe();
-  const sessionParams: Stripe.Checkout.SessionCreateParams={mode:'payment',customer_email:customer?.email||undefined,line_items:[{price_data:{currency,product_data:{name:`Quote ${quote.quote_number}`},unit_amount:amount},quantity:1}],metadata:{quoteId:quote.id,businessId:membership.business_id,testDirectPayment:directTestPayments?'true':'false'},success_url:`${getAppUrl()}/quote/payment/success?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${getAppUrl()}/quote/payment/cancelled`};
-  if(!directTestPayments){
-    sessionParams.metadata={...sessionParams.metadata,connectedAccountId:business.stripe_connected_account_id!,platformFeeAmount:String(fee)};
-    sessionParams.payment_intent_data={application_fee_amount:fee,transfer_data:{destination:business.stripe_connected_account_id!},metadata:{quoteId:quote.id,businessId:membership.business_id}};
-  }
+  const sessionParams: Stripe.Checkout.SessionCreateParams={mode:'payment',customer_email:customer?.email||undefined,line_items:[{price_data:{currency,product_data:{name:`Quote ${quote.quote_number}`},unit_amount:amount},quantity:1}],metadata:{quoteId:quote.id,businessId:membership.business_id,connectedAccountId:business.stripe_connected_account_id,platformFeeAmount:String(fee)},payment_intent_data:{application_fee_amount:fee,transfer_data:{destination:business.stripe_connected_account_id},metadata:{quoteId:quote.id,businessId:membership.business_id}},success_url:`${getAppUrl()}/quote/payment/success?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${getAppUrl()}/quote/payment/cancelled`};
   const session=(await stripe.checkout.sessions.create(sessionParams,{idempotencyKey:`quote-payment:${quote.id}`})) as unknown as Stripe.Checkout.Session;
   if(!session.url)return NextResponse.json({error:'Stripe did not return a checkout URL.'},{status:502});
   const {error:updateError}=await supabase.from('quotes').update({payment_status:'pending',stripe_checkout_session_id:session.id,updated_at:new Date().toISOString()}).eq('id',quote.id).eq('business_id',membership.business_id);if(updateError)return NextResponse.json({error:'Stripe checkout was created, but the quote could not be updated. Please do not create another payment yet.'},{status:500});
-  return NextResponse.json({url:session.url,platformFeePercent:directTestPayments?0:feePercent,directTestPayment:directTestPayments});
- }catch(error){console.error('Stripe Connect quote checkout failed:',error instanceof Error?error.message:'unknown');return NextResponse.json({error:'Stripe could not start the payment. Check the connected account and platform configuration.'},{status:502});}
+  return NextResponse.json({url:session.url,platformFeePercent:feePercent});
+ }catch(error){console.error('Stripe Connect quote checkout failed:',error instanceof Error?error.message:'unknown');return NextResponse.json({error:'Stripe could not start the payment. Check the live connected account and platform configuration.'},{status:502});}
 }
