@@ -74,3 +74,7 @@ After onboarding, share `https://YOUR_DOMAIN/{business-slug}/lead`. The dashboar
 ## Stripe production mode
 
 Production deployments require a live Stripe secret (`sk_live_...`). Configure Live-mode Price IDs and the Live webhook signing secret in Vercel. Customer quote payments are Connect payments only; DetailFlow does not expose a direct platform test-payment path in production.
+
+## Customer lead links
+
+Customer leads are intentionally not discoverable from a public business directory. The `/quote` business chooser and legacy `/quote/{businessSlug}` lead route are removed. Each business owner shares the business-specific customer URL from Settings, for example `/{business-slug}/lead`. The customer form resolves the business server-side and writes the lead only to that business. Quote payment links under `/q/{token}` remain separate and are not lead-entry links.
