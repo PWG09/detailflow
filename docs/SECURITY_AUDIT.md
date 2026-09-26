@@ -55,3 +55,12 @@ Static review reduces the risk of common authorization bugs but does not replace
 - Stripe webhooks are exempt from generic IP throttling so Stripe retries are not blocked.
 - The persistent limiter stores only a SHA-256 key hash, not the raw IP/token.
 - Apply `supabase/migrations/20260925040000_security_rate_limits.sql` before relying on persistent limiter state in production.
+
+
+## Public lead-link tenant isolation
+
+Each business receives a canonical public lead URL: `/{businessSlug}/lead`. The browser sends only the slug; the server resolves that slug to exactly one business and creates the lead with that server-derived `business_id`. The submitted service is also looked up with the same `business_id`. There is no client-controlled business ID in the lead creation request.
+
+The resolver never falls back to another business when a slug is invalid. This prevents a broken link from silently sending a customer to the wrong business. Dashboard owners can copy/share their business-specific lead URL from Settings.
+
+Authorization regression test: create two businesses, submit through Business A's `/business-a/lead`, then verify the resulting lead is visible to A and absent from B. Also request `/business-b/lead` while changing form fields and confirm the server still binds the lead to B.

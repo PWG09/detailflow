@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { isReservedBusinessSlug, normalizeBusinessSlug } from '@/lib/slug';
 
 const businessSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -20,9 +21,11 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'You must be signed in.' }, { status: 401 });
     const parsed = businessSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: 'Use a valid business name and public link.' }, { status: 400 });
+    const slug = normalizeBusinessSlug(parsed.data.slug);
+    if (!slug || isReservedBusinessSlug(slug)) return NextResponse.json({ error: 'Choose another public link name.' }, { status: 400 });
     const { data: existing } = await supabase.from('businesses').select('id, slug').eq('owner_id', user.id).limit(1).maybeSingle();
     if (existing) return NextResponse.json(existing, { status: 200 });
-    const { data, error } = await supabase.from('businesses').insert({ owner_id: user.id, name: parsed.data.name, slug: parsed.data.slug, email: parsed.data.email, phone: parsed.data.phone, description: parsed.data.description }).select('id, slug').single();
+    const { data, error } = await supabase.from('businesses').insert({ owner_id: user.id, name: parsed.data.name, slug, email: parsed.data.email, phone: parsed.data.phone, description: parsed.data.description }).select('id, slug').single();
     if (error?.code === '23505') return NextResponse.json({ error: 'That public link is already taken.' }, { status: 409 });
     if (error) { console.error('Business creation failed', error.message); return NextResponse.json({ error: `Unable to create the workspace (${error.code || 'database'}).` }, { status: 500 }); }
     const { error: serviceError } = await supabase.from('services').insert({ business_id: data.id, name: parsed.data.firstServiceName, pricing_type: 'range', minimum_price: parsed.data.firstServiceMinimum, maximum_price: parsed.data.firstServiceMaximum, display_order: 0 });

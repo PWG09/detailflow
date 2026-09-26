@@ -6,7 +6,13 @@ export const runtime='nodejs';
 export async function POST(request:Request){
  const signature=request.headers.get('stripe-signature');const webhookSecret=process.env.STRIPE_WEBHOOK_SECRET;if(!signature||!webhookSecret)return NextResponse.json({error:'Stripe webhook is not configured.'},{status:400});
  let event:Stripe.Event;try{event=getStripe().webhooks.constructEvent(await request.text(),signature,webhookSecret);}catch{return NextResponse.json({error:'Invalid Stripe signature.'},{status:400});}
- const supabase=createSupabaseAdminClient();const {data:existingEvent}=await supabase.from('stripe_events').select('stripe_event_id').eq('stripe_event_id',event.id).maybeSingle();if(existingEvent)return NextResponse.json({received:true,duplicate:true});
+ const supabase=createSupabaseAdminClient();
+ const {error:claimError}=await supabase.from('stripe_events').insert({stripe_event_id:event.id,event_type:event.type});
+ if(claimError){
+  if(claimError.code==='23505') return NextResponse.json({received:true,duplicate:true});
+  console.error('Unable to claim Stripe event:',claimError.message);
+  return NextResponse.json({error:'Webhook processing unavailable.'},{status:500});
+ }
  try{
   if(event.type==='checkout.session.completed'||event.type==='checkout.session.async_payment_succeeded'){
    const session=event.data.object as Stripe.Checkout.Session;const quoteId=session.metadata?.quoteId;
@@ -37,7 +43,10 @@ export async function POST(request:Request){
   if(event.type==='charge.dispute.created'){const dispute=event.data.object as Stripe.Dispute;const paymentIntent=typeof dispute.payment_intent==='string'?dispute.payment_intent:null;if(paymentIntent)await supabase.from('quotes').update({payment_status:'disputed',updated_at:new Date().toISOString()}).eq('stripe_payment_intent_id',paymentIntent);}
   if(event.type==='charge.refunded'){const charge=event.data.object as Stripe.Charge;const quoteId=charge.metadata?.quoteId;if(quoteId)await supabase.from('quotes').update({payment_status:'refunded',updated_at:new Date().toISOString()}).eq('id',quoteId);else if(typeof charge.payment_intent==='string')await supabase.from('quotes').update({payment_status:'refunded',updated_at:new Date().toISOString()}).eq('stripe_payment_intent_id',charge.payment_intent);}
   if(event.type==='account.updated'){const account=event.data.object as Stripe.Account;const businessId=account.metadata?.businessId;if(businessId)await supabase.from('businesses').update({stripe_connect_status:account.charges_enabled&&account.payouts_enabled?'connected':'incomplete',stripe_charges_enabled:account.charges_enabled===true,stripe_payouts_enabled:account.payouts_enabled===true,stripe_details_submitted:account.details_submitted===true,updated_at:new Date().toISOString()}).eq('id',businessId);}
- const {error:eventInsertError}=await supabase.from('stripe_events').insert({stripe_event_id:event.id,event_type:event.type});if(eventInsertError && eventInsertError.code!=='23505')throw eventInsertError;
- }catch(error){console.error('Stripe webhook processing failed:',event.type,error instanceof Error?error.message:'unknown');return NextResponse.json({error:'Webhook processing failed.'},{status:500});}
+ }catch(error){
+  console.error('Stripe webhook processing failed:',event.type,error instanceof Error?error.message:'unknown');
+  await supabase.from('stripe_events').delete().eq('stripe_event_id',event.id);
+  return NextResponse.json({error:'Webhook processing failed.'},{status:500});
+ }
  return NextResponse.json({received:true});
 }

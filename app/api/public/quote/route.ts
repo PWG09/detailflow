@@ -5,6 +5,7 @@ import { getClientIp, persistentRateLimit, verifyTurnstile } from '@/lib/securit
 import { isPro, monthlyLeadLimit } from '@/lib/entitlements';
 import { assessVehicle } from '@/lib/ai';
 import { sendEmail, emailShell, escapeHtml } from '@/lib/email';
+import { normalizeBusinessSlug } from '@/lib/slug';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     stage = 'form';
     const formData = await request.formData();
     const parsed = publicQuoteSchema.safeParse({
-      businessSlug: formData.get('businessSlug'),
+      businessSlug: normalizeBusinessSlug(String(formData.get('businessSlug') || '')),
       serviceName: formData.get('serviceName'),
       firstName: formData.get('firstName'),
       lastName: formData.get('lastName'),
@@ -46,28 +47,24 @@ export async function POST(request: Request) {
     stage = 'config';
     const supabase = createSupabaseAdminClient();
     stage = 'business';
-    const requestedSlug = input.businessSlug.trim();
+    const requestedSlug = normalizeBusinessSlug(input.businessSlug);
     const { data: business, error: businessError } = await supabase.from('businesses').select('id, slug, name, email, plan').eq('slug', requestedSlug).maybeSingle();
     if (businessError) return databaseFailure('business lookup', businessError);
-    if (!business) {
-      const { data: nearbyBusinesses, error: lookupDebugError } = await supabase.from('businesses').select('slug, name').limit(20);
-      console.error('Public quote slug mismatch', {
-        requestedSlug,
-        nearbyBusinesses,
-        lookupDebugError: lookupDebugError?.message,
-      });
-      return NextResponse.json({ error: `This business quote link is not available for "${requestedSlug}". Check the public link slug in Supabase.` }, { status: 404 });
-    }
+    if (!business) return NextResponse.json({ error: 'This business lead link is not available.' }, { status: 404 });
+
+    const emailRate = await persistentRateLimit(`public-quote-email:${business.id}:${input.email.toLowerCase()}`, 5, 60 * 60);
+    if (!emailRate.allowed) return NextResponse.json({ error: 'Too many requests from this email address. Please try again later.' }, { status: 429, headers: { 'Retry-After': String(Math.ceil(emailRate.retryAfter / 1000)) } });
 
     stage = 'service';
-    const { data: service, error: serviceError } = await supabase.from('services').select('id, minimum_price, maximum_price').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();
+    const { data: service, error: serviceError } = await supabase.from('services').select('id, name, minimum_price, maximum_price, requires_photos').eq('business_id', business.id).eq('name', input.serviceName).eq('active', true).maybeSingle();
     if (serviceError) return databaseFailure('service lookup', serviceError);
     if (!service) return NextResponse.json({ error: 'The selected service is no longer available.' }, { status: 400 });
 
-    if (!isPro(business.plan)) {
-      const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
+    const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
+    const leadLimit = monthlyLeadLimit(business.plan);
+    if (Number.isFinite(leadLimit)) {
       const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', business.id).gte('created_at', monthStart.toISOString()).neq('status', 'archived');
-      if ((count ?? 0) >= monthlyLeadLimit(business.plan)) return NextResponse.json({ error: 'This business has reached its monthly quote-request limit. Please contact the business directly.' }, { status: 429 });
+      if ((count ?? 0) >= leadLimit) return NextResponse.json({ error: 'This business has reached its monthly lead limit. Please contact the business directly.' }, { status: 429 });
     }
 
     stage = 'customer';
@@ -84,6 +81,7 @@ export async function POST(request: Request) {
     if (customerError) return databaseFailure('customer save', customerError);
 
     const photos = formData.getAll('photos').filter((value): value is File => value instanceof File && value.size > 0);
+    if (service.requires_photos && photos.length === 0) return NextResponse.json({ error: 'At least one vehicle photo is required for this service.' }, { status: 400 });
     if (photos.length > 8) return NextResponse.json({ error: 'Please upload no more than 8 photos.' }, { status: 400 });
     const totalPhotoBytes = photos.reduce((sum, photo) => sum + photo.size, 0);
     if (totalPhotoBytes > 30 * 1024 * 1024) return NextResponse.json({ error: 'Your photos are too large. Please keep the total upload under 30 MB.' }, { status: 413 });
@@ -115,7 +113,11 @@ export async function POST(request: Request) {
       const extension = photo.isJpeg ? 'jpg' : 'png';
       const path = `${business.id}/leads/${lead.id}/${crypto.randomUUID()}.${extension}`;
       const { error: uploadError } = await supabase.storage.from('vehicle-photos').upload(path, photo.bytes, { contentType: photo.isJpeg ? 'image/jpeg' : 'image/png', upsert: false });
-      if (uploadError) return databaseFailure('photo upload', { code: 'storage' });
+      if (uploadError) {
+        if (photoPaths.length) await supabase.storage.from('vehicle-photos').remove(photoPaths).catch(() => undefined);
+        await supabase.from('leads').delete().eq('id', lead.id).eq('business_id', business.id);
+        return databaseFailure('photo upload', { code: 'storage' });
+      }
       photoPaths.push(path);
     }
 
@@ -132,6 +134,8 @@ export async function POST(request: Request) {
         .single();
       if (photoPathError) {
         console.error('Lead photo path save failed', { leadId: lead.id, photoPaths, code: photoPathError.code, message: photoPathError.message });
+        await supabase.storage.from('vehicle-photos').remove(photoPaths).catch(() => undefined);
+        await supabase.from('leads').delete().eq('id', lead.id).eq('business_id', business.id);
         return databaseFailure('photo path save', photoPathError);
       }
       if (!savedLead?.photo_paths?.length) {
@@ -165,11 +169,14 @@ export async function POST(request: Request) {
 
     const estimate = { minimum: service.minimum_price, maximum: service.maximum_price, currency: 'USD' };
     const businessEmail = business.email;
+    const serviceLabel = service.name || input.serviceName;
     if (input.email) {
       try { await sendEmail({ to: input.email, subject: `Quote request received — ${business.name}`, html: emailShell('Request received', `<p>Hi ${escapeHtml(input.firstName)},</p><p>Your quote request for <strong>${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}</strong> was sent to ${escapeHtml(business.name)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>The business will review your request and contact you with the next step.</p>`) }); } catch (error) { console.error('Customer confirmation email failed', error); }
     }
     if (businessEmail) {
-      try { await sendEmail({ to: businessEmail, subject: `New quote request — ${input.firstName} ${input.lastName}`, html: emailShell('New quote request', `<p><strong>${escapeHtml(input.firstName)} ${escapeHtml(input.lastName)}</strong> requested ${escapeHtml(input.serviceName)} for ${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>Lead ID: ${escapeHtml(lead.id)}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://detailflow-two.vercel.app').replace(/\/+$/, '');
+      const leadUrl = `${appUrl}/dashboard/leads/${lead.id}`;
+      try { await sendEmail({ to: businessEmail, subject: `New lead — ${input.firstName} ${input.lastName}`, html: emailShell('New lead received', `<p><strong>${escapeHtml(input.firstName)} ${escapeHtml(input.lastName)}</strong> requested ${escapeHtml(serviceLabel)} for ${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p style="margin-top:24px"><a href="${leadUrl}" style="display:inline-block;background:#15231e;color:#fff;padding:12px 18px;text-decoration:none;border-radius:8px">Open lead in DetailFlow</a></p><p style="color:#6b7280;font-size:12px">Lead ID: ${escapeHtml(lead.id)}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
     }
 
     return NextResponse.json({ leadId: lead.id, estimate, aiAssessment }, { status: 201 });

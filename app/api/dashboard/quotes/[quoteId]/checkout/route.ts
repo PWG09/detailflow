@@ -15,7 +15,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{quoteId:st
  if(quote.status!=='accepted')return NextResponse.json({error:'Only accepted quotes can be paid.'},{status:400});if(quote.payment_status==='paid')return NextResponse.json({error:'This quote is already paid.'},{status:409});
  const {data:business,error:businessError}=await supabase.from('businesses').select('id,name,currency,stripe_connected_account_id,stripe_connect_status,stripe_charges_enabled,stripe_payouts_enabled,platform_fee_percent').eq('id',membership.business_id).single();
  if(businessError){console.error('Business payment configuration lookup failed:',businessError.message);return NextResponse.json({error:'Unable to load the business payment configuration.'},{status:500});}
- const {data:customer}=quote.customer_id?await supabase.from('customers').select('email,first_name,last_name').eq('id',quote.customer_id).maybeSingle():{data:null};
+ const {data:customer}=quote.customer_id?await supabase.from('customers').select('email,first_name,last_name').eq('id',quote.customer_id).eq('business_id',membership.business_id).maybeSingle():{data:null};
  if(quote.stripe_checkout_session_id){try{const s=(await getStripe().checkout.sessions.retrieve(quote.stripe_checkout_session_id)) as unknown as Stripe.Checkout.Session;if(s.url)return NextResponse.json({url:s.url});}catch{}}
  const amount=Math.round(Number(quote.total)*100);if(!Number.isInteger(amount)||amount<=0)return NextResponse.json({error:'The quote must have a valid total.'},{status:400});
  const currency=(business?.currency||'USD').toLowerCase();
