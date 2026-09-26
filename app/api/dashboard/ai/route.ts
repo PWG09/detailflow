@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { assessVehicle } from '@/lib/ai';
+import { persistentRateLimit } from '@/lib/security';
 
 const schema = z.object({ leadId: z.string().uuid() });
 export const runtime = 'nodejs';
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'AI photo assessment is available on Pro.' }, { status: 402 });
   }
 
+  const throttle = await persistentRateLimit(`dashboard-ai:${membership.business_id}:${user.id}`, 10, 60);
+  if (!throttle.allowed) return NextResponse.json({ error: 'AI requests are temporarily throttled. Please try again shortly.' }, { status: 429, headers: { 'Retry-After': String(Math.max(1, Math.ceil(throttle.retryAfter / 1000))) } });
+
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
@@ -40,7 +44,8 @@ export async function POST(request: Request) {
     .select('id', { count: 'exact', head: true })
     .eq('business_id', membership.business_id)
     .gte('ai_assessed_at', monthStart.toISOString());
-  if ((count ?? 0) >= 100) {
+  const aiMonthlyLimit = business?.plan === 'business' ? Number(process.env.BUSINESS_AI_MONTHLY_HARD_CAP || 5000) : 100;
+  if ((count ?? 0) >= aiMonthlyLimit) {
     return NextResponse.json({ error: 'Monthly AI assessment limit reached.' }, { status: 429 });
   }
 

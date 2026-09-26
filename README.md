@@ -131,3 +131,17 @@ Vercel is the deployment target described above; Supabase hosts the backend serv
 The completed build includes production-oriented billing entitlements, Stripe subscription lifecycle handling, customer/business email notifications through Resend, configurable OpenAI-compatible vision AI, Pro AI limits, team invitations, audit logs, data export, cookie consent, lead lifecycle timestamps, stronger upload validation, and deployment documentation.
 
 See `docs/DEPLOYMENT_FINAL.md` before deploying. Secrets are intentionally excluded from the project archive.
+
+## Production abuse protection
+
+Apply the migration `supabase/migrations/20260925040000_security_rate_limits.sql`.
+
+Optional Cloudflare Turnstile for public quote submissions:
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+- `TURNSTILE_SECRET_KEY`
+
+Cost-control default:
+- Pro AI: 100 assessments/month
+- Business AI hard cap: 5000/month unless `BUSINESS_AI_MONTHLY_HARD_CAP` is set
+
+The API also applies global request throttling and stricter persistent limits to expensive public/payment/AI operations.

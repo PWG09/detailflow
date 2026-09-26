@@ -41,10 +41,16 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
   // Keep the primary query limited to columns that exist in the original schema.
   // This makes the lead detail page resilient if the optional production migration
   // has not been applied yet.
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return null;
+  const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return null;
+
   const { data, error } = await supabase
     .from('leads')
     .select('id,status,notes,vehicle,condition,estimate,created_at')
     .eq('id', leadId)
+    .eq('business_id', membership.business_id)
     .maybeSingle();
 
   if (error || !data) {
@@ -78,6 +84,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
       .from('leads')
       .select('ai_assessment')
       .eq('id', leadId)
+      .eq('business_id', membership.business_id)
       .maybeSingle();
     if (!aiResult.error) {
       aiAssessment = safeJsonObject<NonNullable<AiAssessment>>(aiResult.data?.ai_assessment) as AiAssessment;

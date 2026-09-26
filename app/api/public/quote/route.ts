@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { publicQuoteSchema } from '@/lib/validation/public-quote';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp, persistentRateLimit, verifyTurnstile } from '@/lib/security';
 import { isPro, monthlyLeadLimit } from '@/lib/entitlements';
 import { assessVehicle } from '@/lib/ai';
-import { sendEmail, emailShell } from '@/lib/email';
+import { sendEmail, emailShell, escapeHtml } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   let stage = 'request';
   try {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
-    const rate = checkRateLimit(`public-quote:${ip}`);
+    const rate = await persistentRateLimit(`public-quote:${ip}`, 12, 60 * 60);
     if (!rate.allowed) return NextResponse.json({ error: 'Too many quote requests. Please try again later.' }, { status: 429, headers: { 'Retry-After': String(Math.ceil(rate.retryAfter / 1000)) } });
     if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) return NextResponse.json({ error: 'Please submit the quote form with its fields and photos.' }, { status: 400 });
     stage = 'form';
@@ -41,6 +41,8 @@ export async function POST(request: Request) {
     if (!parsed.success) return NextResponse.json({ error: 'Please review the required quote details.' }, { status: 400 });
 
     const input = parsed.data;
+    const captcha = await verifyTurnstile(String(formData.get('captchaToken') || ''), getClientIp(request));
+    if (!captcha.success) return NextResponse.json({ error: captcha.error || 'CAPTCHA verification failed.' }, { status: 400 });
     stage = 'config';
     const supabase = createSupabaseAdminClient();
     stage = 'business';
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
 
     const photos = formData.getAll('photos').filter((value): value is File => value instanceof File && value.size > 0);
     if (photos.length > 8) return NextResponse.json({ error: 'Please upload no more than 8 photos.' }, { status: 400 });
+    const totalPhotoBytes = photos.reduce((sum, photo) => sum + photo.size, 0);
+    if (totalPhotoBytes > 30 * 1024 * 1024) return NextResponse.json({ error: 'Your photos are too large. Please keep the total upload under 30 MB.' }, { status: 413 });
     const validatedPhotos: { bytes: Uint8Array; isJpeg: boolean }[] = [];
     for (const photo of photos) {
       if (photo.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'Each photo must be smaller than 10 MB.' }, { status: 400 });
@@ -138,17 +142,34 @@ export async function POST(request: Request) {
 
     let aiAssessment = null;
     if (photoPaths.length > 0 && isPro(business.plan)) {
-      aiAssessment = await assessVehicle(validatedPhotos.map((photo) => photo.bytes));
-      await supabase.from('leads').update({ ai_assessment: aiAssessment, ai_assessed_at: new Date().toISOString() }).eq('id', lead.id);
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const aiCap = business.plan === 'business'
+        ? Number(process.env.BUSINESS_AI_MONTHLY_HARD_CAP || 5000)
+        : 100;
+      const { count: aiCount } = await supabase.from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', business.id)
+        .gte('ai_assessed_at', monthStart.toISOString());
+      if ((aiCount ?? 0) >= aiCap) {
+        console.warn('AI monthly hard cap reached for business', { businessId: business.id, aiCap });
+      } else {
+        const aiRate = await persistentRateLimit(`public-ai:${business.id}`, 20, 60);
+        if (aiRate.allowed) {
+          aiAssessment = await assessVehicle(validatedPhotos.slice(0, 4).map((photo) => photo.bytes));
+          await supabase.from('leads').update({ ai_assessment: aiAssessment, ai_assessed_at: new Date().toISOString() }).eq('id', lead.id);
+        }
+      }
     }
 
     const estimate = { minimum: service.minimum_price, maximum: service.maximum_price, currency: 'USD' };
     const businessEmail = business.email;
     if (input.email) {
-      try { await sendEmail({ to: input.email, subject: `Quote request received — ${business.name}`, html: emailShell('Request received', `<p>Hi ${input.firstName},</p><p>Your quote request for <strong>${input.year} ${input.makeModel}</strong> was sent to ${business.name}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>The business will review your request and contact you with the next step.</p>`) }); } catch (error) { console.error('Customer confirmation email failed', error); }
+      try { await sendEmail({ to: input.email, subject: `Quote request received — ${business.name}`, html: emailShell('Request received', `<p>Hi ${escapeHtml(input.firstName)},</p><p>Your quote request for <strong>${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}</strong> was sent to ${escapeHtml(business.name)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>The business will review your request and contact you with the next step.</p>`) }); } catch (error) { console.error('Customer confirmation email failed', error); }
     }
     if (businessEmail) {
-      try { await sendEmail({ to: businessEmail, subject: `New quote request — ${input.firstName} ${input.lastName}`, html: emailShell('New quote request', `<p><strong>${input.firstName} ${input.lastName}</strong> requested ${input.serviceName} for ${input.year} ${input.makeModel}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>Lead ID: ${lead.id}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
+      try { await sendEmail({ to: businessEmail, subject: `New quote request — ${input.firstName} ${input.lastName}`, html: emailShell('New quote request', `<p><strong>${escapeHtml(input.firstName)} ${escapeHtml(input.lastName)}</strong> requested ${escapeHtml(input.serviceName)} for ${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>Lead ID: ${escapeHtml(lead.id)}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
     }
 
     return NextResponse.json({ leadId: lead.id, estimate, aiAssessment }, { status: 201 });

@@ -125,3 +125,33 @@ Do not label the application production-ready until the relevant items above hav
 - [ ] Confirm no marketing email system is enabled without an explicit opt-in/unsubscribe workflow. Current DetailFlow emails are transactional only.
 - [ ] Age-gating is not enabled by default because DetailFlow is not currently an age-restricted product; add an age gate only if the final product/legal requirements require one.
 - [ ] Finalize legal copy with qualified counsel before launch; the included Privacy/Terms pages are implementation templates, not legal advice.
+
+## Vibe-code security hardening
+- [ ] Attempt IDOR against every dashboard resource by replacing UUIDs with an ID from a second test business; expect 404/403 and no data leakage.
+- [ ] Verify all dashboard mutations derive `business_id` from the authenticated membership rather than request JSON.
+- [ ] Verify no `Access-Control-Allow-Origin: *` header exists on application APIs.
+- [ ] Verify cross-origin dashboard POST/PATCH/DELETE requests are rejected.
+- [ ] Verify no `dangerouslySetInnerHTML`, raw `innerHTML`, or unsafe HTML rendering is used for user/AI content.
+- [ ] Verify uploaded files are size/count/type/magic-byte validated and stored privately.
+- [ ] Verify SQL is never built by string concatenation from user input.
+- [ ] Verify secret values never appear in client bundles, source, logs, or error responses.
+- [ ] Verify Stripe direct test payments are disabled in live mode and Connect is required for real payouts.
+
+## Product realism checklist
+- [x] Custom 404 page
+- [x] Primary CTA above the fold
+- [x] Per-route metadata for public pages and noindex metadata for authenticated/private pages
+- [x] Open Graph image
+- [x] Favicon
+- [x] robots.txt
+- [x] sitemap.xml
+- [x] Text content rendered with accessible labels and no raw HTML injection
+- [x] Mobile breakpoints plus sticky public quote CTA
+- [x] Loading states
+- [x] Form error/success states
+- [x] Quote request thank-you state
+- [x] Privacy Policy page
+- [x] Terms page
+- [x] Cookie banner and Cookie Policy
+- [x] Analytics is intentionally disabled until consent/analytics configuration is finalized
+- [ ] Configure a real public contact email/address before launch (`NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_CONTACT_ADDRESS`)

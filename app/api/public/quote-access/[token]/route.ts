@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp, persistentRateLimit } from '@/lib/security';
 import { getAppUrl, getStripe } from '@/lib/stripe';
 import Stripe from 'stripe';
 export const runtime='nodejs';

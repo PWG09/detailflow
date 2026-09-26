@@ -1,5 +1,9 @@
 export type EmailMessage = { to: string; subject: string; html: string; text?: string };
 
+export function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
+}
+
 export async function sendEmail(message: EmailMessage) {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -13,5 +17,5 @@ export async function sendEmail(message: EmailMessage) {
 }
 
 export function emailShell(title: string, body: string) {
-  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:32px;color:#111827"><h1 style="font-size:24px">${title}</h1>${body}<p style="color:#6b7280;font-size:12px;margin-top:32px">Sent by DetailFlow.</p></div>`;
+  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:32px;color:#111827"><h1 style="font-size:24px">${escapeHtml(title)}</h1>${body}<p style="color:#6b7280;font-size:12px;margin-top:32px">Sent by DetailFlow.</p></div>`;
 }

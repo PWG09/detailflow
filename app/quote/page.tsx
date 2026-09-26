@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+export const metadata: Metadata = { title: 'Request a quote | DetailFlow', description: 'Choose a detailing business and request a secure quote.' };
 import Link from 'next/link';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 

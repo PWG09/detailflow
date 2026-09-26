@@ -14,9 +14,14 @@ export default async function LeadsPage() {
   let error = '';
   try {
     const supabase = await createSupabaseServerClient();
-    const result = await supabase.from('leads').select('id,status,vehicle,estimate,created_at').order('created_at', { ascending: false });
-    if (result.error) error = 'We could not load your leads right now.';
-    else leads = (result.data ?? []) as Lead[];
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: membership } = user ? await supabase.from('business_members').select('business_id').eq('user_id', user.id).maybeSingle() : { data: null };
+    if (!membership) { error = 'Workspace not found.'; }
+    else {
+      const result = await supabase.from('leads').select('id,status,vehicle,estimate,created_at').eq('business_id', membership.business_id).order('created_at', { ascending: false });
+      if (result.error) error = 'We could not load your leads right now.';
+      else leads = (result.data ?? []) as Lead[];
+    }
   } catch {
     error = 'Connect Supabase to load your leads.';
   }

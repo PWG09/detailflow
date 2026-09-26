@@ -1,2 +1,8 @@
 import type { MetadataRoute } from 'next';
-export default function sitemap(): MetadataRoute.Sitemap { const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; return [{ url: base }, { url: `${base}/quote` }, { url: `${base}/privacy` }, { url: `${base}/terms` }]; }
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const base = process.env.NEXT_PUBLIC_APP_URL || 'https://detailflow-two.vercel.app';
+  return [
+    '', '/features', '/pricing', '/faq', '/contact', '/quote', '/privacy', '/terms', '/refunds', '/cookies'
+  ].map((path) => ({ url: `${base}${path}` }));
+}

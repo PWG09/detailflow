@@ -71,3 +71,8 @@ h1 { font-size:clamp(48px,6.4vw,82px); line-height:.98; letter-spacing:-.075em; 
 @media (max-width:500px) { .auth-panel { padding:28px 22px; } .auth-panel .brand { margin-bottom:42px; } .auth-panel h1 { font-size:38px; } }
 
 .spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+
+.mobile-sticky-cta{display:none}
+@media (max-width: 700px){.mobile-sticky-cta{display:flex;position:fixed;left:16px;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:900;justify-content:center;box-shadow:0 12px 35px rgba(0,0,0,.18)}}
+
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(211,128,62,.5);outline-offset:3px}
