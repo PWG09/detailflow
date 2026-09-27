@@ -46,6 +46,9 @@ export async function middleware(request: NextRequest) {
     return finish(NextResponse.json({ error: 'Cross-origin request blocked.' }, { status: 403 }), 403);
   }
 
+  const requiresUser = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding') || pathname.startsWith('/api/dashboard/') || pathname.startsWith('/api/onboarding/');
+  if (!requiresUser) return finish(NextResponse.next({ request }));
+
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -62,7 +65,6 @@ export async function middleware(request: NextRequest) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const requiresUser = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding');
   const billingProtected = (pathname.startsWith('/dashboard') && pathname !== '/dashboard/settings') || (pathname.startsWith('/api/dashboard/') && !pathname.startsWith('/api/dashboard/billing') && pathname !== '/api/dashboard/business');
   if (user && billingProtected) {
     const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', user.id).limit(1).maybeSingle();
