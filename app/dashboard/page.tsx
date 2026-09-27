@@ -1,15 +1,12 @@
 import Link from 'next/link';
 import { ArrowRight, BarChart3, ClipboardList, DollarSign, Plus, Users } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getDashboardContext } from '@/lib/dashboard-context';
 
 export default async function Dashboard() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user, business } = await getDashboardContext();
   const fullName = user?.user_metadata?.full_name?.trim() || user?.email?.split('@')[0] || 'Business owner';
   const firstName = fullName.split(/\s+/)[0];
 
-  const { data: membership } = user ? await supabase.from('business_members').select('business_id').eq('user_id', user.id).maybeSingle() : { data: null };
-  const { data: business } = membership ? await supabase.from('businesses').select('id,name,slug,trial_status,trial_ends_at,plan').eq('id', membership.business_id).maybeSingle() : { data: null };
 
   const [{ count: leadCount }, { count: quoteCount }, { count: customerCount }] = await Promise.all([
     business ? supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', business.id) : Promise.resolve({ count: 0 }),
