@@ -20,7 +20,8 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
     : { data: null };
   const fullName = user?.user_metadata?.full_name?.trim() || user?.email?.split('@')[0] || 'Business owner';
   const initials = fullName.split(/\s+/).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'U';
-  const trialActive = business?.trial_status === 'active' && business.trial_ends_at && new Date(business.trial_ends_at).getTime() > Date.now();
+  const trialEndsAt = business?.trial_ends_at ? new Date(business.trial_ends_at) : null;
+  const trialActive = business?.trial_status === 'active' && !!trialEndsAt && trialEndsAt.getTime() > Date.now();
 
   return <main className="dashboard-page">
     <aside className="dashboard-sidebar">
@@ -32,7 +33,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
       </div>
     </aside>
     <section className="dashboard-workspace">
-      {trialActive && <div className="trial-banner"><span><strong>14-day trial</strong> · {Math.max(1, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / 86400000))} days remaining</span><Link href="/dashboard/settings">View plan <span aria-hidden="true">→</span></Link></div>}
+      {trialActive && <div className="trial-banner"><span><strong>14-day trial</strong> · {Math.max(1, Math.ceil((trialEndsAt!.getTime() - Date.now()) / 86400000))} days remaining</span><Link href="/dashboard/settings">View plan <span aria-hidden="true">→</span></Link></div>}
       {children}
     </section>
   </main>;
