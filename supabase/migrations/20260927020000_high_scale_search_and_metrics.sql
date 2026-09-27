@@ -203,14 +203,27 @@ after insert or update of business_id or delete on public.customers
 for each row execute function public.sync_business_metrics_customers();
 
 -- One-time backfill. Future reads use one indexed row per workspace.
+with lead_stats as (
+  select business_id, count(*)::bigint as leads_count,
+    count(*) filter (where status = 'won')::bigint as won_leads_count
+  from public.leads group by business_id
+), quote_stats as (
+  select business_id, count(*)::bigint as quotes_count
+  from public.quotes group by business_id
+), customer_stats as (
+  select business_id, count(*)::bigint as customers_count
+  from public.customers group by business_id
+)
 insert into public.business_metrics (business_id, leads_count, quotes_count, customers_count, won_leads_count)
-select
-  b.id,
-  coalesce((select count(*) from public.leads l where l.business_id = b.id), 0),
-  coalesce((select count(*) from public.quotes q where q.business_id = b.id), 0),
-  coalesce((select count(*) from public.customers c where c.business_id = b.id), 0),
-  coalesce((select count(*) from public.leads l2 where l2.business_id = b.id and l2.status = 'won'), 0)
+select b.id,
+  coalesce(ls.leads_count, 0),
+  coalesce(qs.quotes_count, 0),
+  coalesce(cs.customers_count, 0),
+  coalesce(ls.won_leads_count, 0)
 from public.businesses b
+left join lead_stats ls on ls.business_id = b.id
+left join quote_stats qs on qs.business_id = b.id
+left join customer_stats cs on cs.business_id = b.id
 on conflict (business_id) do update set
   leads_count = excluded.leads_count,
   quotes_count = excluded.quotes_count,
