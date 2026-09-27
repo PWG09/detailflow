@@ -49,7 +49,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'We could not securely start the trial. Please try again.' }, { status: 500 });
     }
     const { error: serviceError } = await supabase.from('services').insert({ business_id: data.id, name: parsed.data.firstServiceName, pricing_type: 'range', minimum_price: parsed.data.firstServiceMinimum, maximum_price: parsed.data.firstServiceMaximum, display_order: 0 });
-    if (serviceError) return NextResponse.json({ error: 'Business created, but the first service could not be saved. Add it from Services.' }, { status: 500 });
+    if (serviceError) {
+      const admin = createSupabaseAdminClient();
+      await admin.from('trial_claims').delete().eq('business_id', data.id).eq('user_id', user.id);
+      await admin.from('businesses').delete().eq('id', data.id).eq('owner_id', user.id);
+      console.error('Initial service creation failed:', serviceError.message);
+      return NextResponse.json({ error: 'We could not finish your workspace setup. Please try again.' }, { status: 500 });
+    }
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('Business onboarding failed', error instanceof Error ? error.message : 'unknown error');
