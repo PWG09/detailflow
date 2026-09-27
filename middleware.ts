@@ -63,6 +63,27 @@ export async function middleware(request: NextRequest) {
   });
   const { data: { user } } = await supabase.auth.getUser();
   const requiresUser = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding');
+  const billingProtected = pathname.startsWith('/dashboard') || pathname.startsWith('/api/dashboard/');
+  if (user && billingProtected) {
+    const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', user.id).limit(1).maybeSingle();
+    if (membership) {
+      const { data: business } = await supabase.from('businesses').select('plan,trial_status,trial_ends_at').eq('id', membership.business_id).maybeSingle();
+      const expired = business?.trial_status === 'blocked' ||
+        business?.trial_status === 'expired' ||
+        (business?.trial_status === 'active' && business.trial_ends_at && new Date(business.trial_ends_at).getTime() <= Date.now());
+      if (expired && business?.plan === 'pro') {
+        // Keep the gate time-based so the trial cannot be extended simply by
+        // waiting for the scheduled cleanup job.
+        if (pathname.startsWith('/api/')) {
+          return finish(NextResponse.json({ error: 'Your 14-day trial has ended. Upgrade your plan to continue.', code: 'TRIAL_EXPIRED' }, { status: 402 }), 402);
+        }
+        const upgradeUrl = request.nextUrl.clone();
+        upgradeUrl.pathname = '/upgrade';
+        upgradeUrl.searchParams.set('reason', 'trial-expired');
+        return finish(NextResponse.redirect(upgradeUrl, 307), 307);
+      }
+    }
+  }
   if (requiresUser && !user) {
     logEvent('info', 'auth.redirect_to_login', { requestId, pathname, method });
     const loginUrl = request.nextUrl.clone();
