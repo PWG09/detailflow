@@ -1,9 +1,10 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Upload } from 'lucide-react';
-import Turnstile from '@/app/components/Turnstile';
+const Turnstile = dynamic(() => import('@/app/components/Turnstile'), { ssr: false });
 
 type Service = { name: string; minimum_price: number; maximum_price: number; requires_photos: boolean };
 const vehicles = ['Sedan','SUV','Truck','Coupe','Van','Motorcycle','Other'] as const;
@@ -44,10 +45,36 @@ export default function BusinessLeadForm() {
     return()=>{cancelled=true};
   },[params.businessSlug]);
 
-  function handlePhotoChange(event:React.ChangeEvent<HTMLInputElement>){
+  async function compressImage(file: File): Promise<File> {
+    if (!file.type.startsWith('image/')) return file;
+    const bitmap = await createImageBitmap(file);
+    const maxDimension = 1800;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+  }
+
+  async function handlePhotoChange(event:React.ChangeEvent<HTMLInputElement>){
     const files=Array.from(event.target.files??[]);
     const selected=files.slice(0,8);
-    setPhotoFiles(selected);setPhotoNames(selected.map(file=>file.name));
+    try {
+      const compressed = await Promise.all(selected.map(compressImage));
+      setPhotoFiles(compressed);
+      setPhotoNames(compressed.map(file=>file.name));
+    } catch {
+      setPhotoFiles(selected);
+      setPhotoNames(selected.map(file=>file.name));
+    }
     if(files.length>8)setError('Please select no more than 8 photos.');
     else if(photosRequired&&selected.length===0)setError('Please upload at least one vehicle photo for this service.');
     else setError('');
