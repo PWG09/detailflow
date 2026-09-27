@@ -45,5 +45,8 @@ export function logRequest(data: {
   ip?: string;
   userId?: string;
 }) {
-  logEvent('info', 'http.request', data);
+  const slow = typeof data.durationMs === 'number' && data.durationMs >= 1000;
+  if (process.env.LOG_REQUESTS === 'true' || slow || (typeof data.status === 'number' && data.status >= 500)) {
+    logEvent(slow ? 'warn' : 'info', 'http.request', data);
+  }
 }
