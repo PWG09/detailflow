@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
   const admin = createSupabaseAdminClient();
   const now = new Date().toISOString();
-  const { data, error } = await admin.from('businesses').update({ trial_status: 'expired', updated_at: now })
+  const { data, error } = await admin.from('businesses').update({ trial_status: 'expired', plan: 'free', updated_at: now })
     .eq('trial_status', 'active').eq('plan', 'pro').lte('trial_ends_at', now).select('id');
 
   if (error) {
