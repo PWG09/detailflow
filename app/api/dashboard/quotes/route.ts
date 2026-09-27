@@ -51,24 +51,27 @@ export async function GET(request: Request) {
     return q.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1);
   }
 
-  let { data, error } = await run(selectWithPayments);
-  if (error) {
-    console.error('[quotes] payment-aware query failed:', error.message);
-    const fallback = await run(selectBase);
-    if (fallback.error) return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
+  const primary = await run(selectWithPayments);
+  let rows: QuoteListRow[] = [];
 
-    const fallbackRows = Array.isArray(fallback.data)
+  if (!primary.error && Array.isArray(primary.data)) {
+    rows = primary.data as unknown as QuoteListRow[];
+  } else {
+    if (primary.error) {
+      console.error('[quotes] payment-aware query failed:', primary.error.message);
+    }
+
+    const fallback = await run(selectBase);
+    if (fallback.error) {
+      return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
+    }
+
+    rows = Array.isArray(fallback.data)
       ? (fallback.data as unknown as QuoteListRow[]).map((quote) =>
           Object.assign({}, quote, { payment_status: 'unpaid' })
         )
       : [];
-
-    data = fallbackRows as typeof data;
   }
-
-  const rows: QuoteListRow[] = Array.isArray(data)
-    ? (data as unknown as QuoteListRow[])
-    : [];
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];
