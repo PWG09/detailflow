@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import Stripe from 'stripe';
+import { hashRiskValue } from '@/lib/trial-risk';
 export const runtime='nodejs';
 export async function POST(request:Request){
  const signature=request.headers.get('stripe-signature');const webhookSecret=process.env.STRIPE_WEBHOOK_SECRET;if(!signature||!webhookSecret)return NextResponse.json({error:'Stripe webhook is not configured.'},{status:400});
@@ -21,7 +22,17 @@ export async function POST(request:Request){
    if(session.mode==='subscription'&&businessId&&plan){const customerId=typeof session.customer==='string'?session.customer:null;const subscriptionId=typeof session.subscription==='string'?session.subscription:null;await supabase.from('businesses').update({plan,stripe_customer_id:customerId,stripe_subscription_id:subscriptionId,subscription_status:'active',updated_at:new Date().toISOString()}).eq('id',businessId);}
   }
   if(event.type==='customer.subscription.created'||event.type==='customer.subscription.updated'||event.type==='customer.subscription.deleted'){
-   const subscription=event.data.object as Stripe.Subscription;const businessId=subscription.metadata?.businessId;if(businessId){const status=subscription.status;const plan=(subscription.metadata?.plan==='business'?'business':'pro');const free=event.type==='customer.subscription.deleted'||status==='canceled'||status==='unpaid'||status==='incomplete_expired';const effectivePlan=free?'free':plan;const customerId=typeof subscription.customer==='string'?subscription.customer:null;const subscriptionItem=subscription.items.data[0];const currentPeriodStart=subscriptionItem?.current_period_start??null;const currentPeriodEnd=subscriptionItem?.current_period_end??null;await supabase.from('businesses').update({plan:effectivePlan,stripe_customer_id:customerId,stripe_subscription_id:subscription.id,subscription_status:status,updated_at:new Date().toISOString()}).eq('id',businessId);await supabase.from('subscriptions').upsert({business_id:businessId,stripe_customer_id:customerId,stripe_subscription_id:subscription.id,stripe_price_id:subscriptionItem?.price.id??null,plan,status,current_period_start:currentPeriodStart?new Date(currentPeriodStart*1000).toISOString():null,current_period_end:currentPeriodEnd?new Date(currentPeriodEnd*1000).toISOString():null,cancel_at_period_end:subscription.cancel_at_period_end,updated_at:new Date().toISOString()},{onConflict:'business_id'});}
+   const subscription=event.data.object as Stripe.Subscription;const businessId=subscription.metadata?.businessId;if(businessId){const status=subscription.status;const plan=(subscription.metadata?.plan==='business'?'business':'pro');const free=event.type==='customer.subscription.deleted'||status==='canceled'||status==='unpaid'||status==='incomplete_expired';const effectivePlan=free?'free':plan;const customerId=typeof subscription.customer==='string'?subscription.customer:null;const subscriptionItem=subscription.items.data[0];
+   let paymentFingerprintHash:string|null=null;
+   try {
+    const defaultPaymentMethod=typeof subscription.default_payment_method==='string'?subscription.default_payment_method:null;
+    if(defaultPaymentMethod){
+     const pm=await getStripe().paymentMethods.retrieve(defaultPaymentMethod);
+     const rawFingerprint=(pm as any).card?.fingerprint || (pm as any).us_bank_account?.fingerprint || null;
+     if(rawFingerprint) paymentFingerprintHash=hashRiskValue(rawFingerprint);
+    }
+   }catch(paymentError){ console.error('Unable to resolve subscription payment fingerprint:',paymentError instanceof Error?paymentError.message:'unknown'); }const currentPeriodStart=subscriptionItem?.current_period_start??null;const currentPeriodEnd=subscriptionItem?.current_period_end??null;await supabase.from('businesses').update({plan:effectivePlan,stripe_customer_id:customerId,stripe_subscription_id:subscription.id,subscription_status:status,updated_at:new Date().toISOString()}).eq('id',businessId);if(paymentFingerprintHash){ await supabase.from('trial_claims').update({payment_fingerprint_hash:paymentFingerprintHash}).eq('business_id',businessId); }
+   await supabase.from('subscriptions').upsert({business_id:businessId,stripe_customer_id:customerId,stripe_subscription_id:subscription.id,stripe_price_id:subscriptionItem?.price.id??null,plan,status,current_period_start:currentPeriodStart?new Date(currentPeriodStart*1000).toISOString():null,current_period_end:currentPeriodEnd?new Date(currentPeriodEnd*1000).toISOString():null,cancel_at_period_end:subscription.cancel_at_period_end,updated_at:new Date().toISOString()},{onConflict:'business_id'});}
   }
   if(event.type==='invoice.paid'||event.type==='invoice.payment_failed'){
    const invoice=event.data.object as Stripe.Invoice;
