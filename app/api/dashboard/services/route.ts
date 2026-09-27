@@ -22,9 +22,9 @@ async function getBusinessId() {
 export async function GET() {
   const { supabase, userId, businessId } = await getBusinessId();
   if (!userId || !businessId) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
-  const { data, error } = await supabase.from('services').select('*').eq('business_id', businessId).order('display_order').order('created_at');
+  const { data, error } = await supabase.from('services').select('id,name,description,pricing_type,minimum_price,maximum_price,active,requires_photos,display_order,created_at,updated_at').eq('business_id', businessId).order('display_order').order('created_at');
   if (error) return NextResponse.json({ error: 'Unable to load services.' }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: Request) {
