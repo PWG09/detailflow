@@ -4,6 +4,9 @@ create extension if not exists pg_trgm;
 
 -- Stable keyset pagination indexes. The id tie-breaker prevents skipped/duplicated
 -- rows when multiple records share the same timestamp.
+create index if not exists business_members_business_user_idx
+  on public.business_members(business_id, user_id);
+
 create index if not exists leads_business_created_id_idx
   on public.leads(business_id, created_at desc, id desc);
 
