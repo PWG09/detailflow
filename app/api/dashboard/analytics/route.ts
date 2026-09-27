@@ -1,3 +1,34 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-export async function GET() { const supabase = await createSupabaseServerClient(); const { data: userData } = await supabase.auth.getUser(); if (!userData.user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 }); const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', userData.user.id).maybeSingle(); if (!membership) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 }); const [leads, quotes, won] = await Promise.all([supabase.from('leads').select('id,status,created_at', { count: 'exact' }).eq('business_id', membership.business_id), supabase.from('quotes').select('id,status,total', { count: 'exact' }).eq('business_id', membership.business_id), supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', membership.business_id).eq('status', 'won')]); if (leads.error || quotes.error || won.error) return NextResponse.json({ error: 'Unable to load analytics.' }, { status: 500 }); const total = leads.count ?? 0; return NextResponse.json({ leads: total, quotes: quotes.count ?? 0, won: won.count ?? 0, conversionRate: total ? Math.round(((won.count ?? 0) / total) * 100) : 0 }); }
+
+export async function GET() {
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+  const { data: membership } = await supabase
+    .from('business_members')
+    .select('business_id')
+    .eq('user_id', userData.user.id)
+    .maybeSingle();
+  if (!membership) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
+
+  const { data: metrics, error } = await supabase
+    .from('business_metrics')
+    .select('leads_count,quotes_count,won_leads_count')
+    .eq('business_id', membership.business_id)
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: 'Unable to load analytics.' }, { status: 500 });
+
+  const leads = Number(metrics?.leads_count ?? 0);
+  const quotes = Number(metrics?.quotes_count ?? 0);
+  const won = Number(metrics?.won_leads_count ?? 0);
+
+  return NextResponse.json({
+    leads,
+    quotes,
+    won,
+    conversionRate: leads ? Math.round((won / leads) * 100) : 0,
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
+}
