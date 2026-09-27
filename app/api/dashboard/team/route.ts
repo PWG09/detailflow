@@ -16,19 +16,9 @@ async function membership() {
 export async function GET() {
   const ctx = await membership();
   if (!ctx) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
-  const { data: members, error } = await ctx.supabase.from('business_members').select('user_id,role,created_at').eq('business_id', ctx.m.business_id).order('created_at');
+  const { data: members, error } = await ctx.supabase.rpc('get_team_members', { p_business_id: ctx.m.business_id });
   if (error) return NextResponse.json({ error: 'Unable to load team members.' }, { status: 500 });
-  const admin = createSupabaseAdminClient();
-  const enriched = await Promise.all((members || []).map(async (member) => {
-    const result = await admin.auth.admin.getUserById(member.user_id);
-    const authUser = result.data.user;
-    return {
-      ...member,
-      email: authUser?.email || 'Member',
-      name: String(authUser?.user_metadata?.full_name || '').trim() || null,
-    };
-  }));
-  return NextResponse.json({ members: enriched, currentRole: ctx.m.role });
+  return NextResponse.json({ members: members ?? [], currentRole: ctx.m.role }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: Request) {
