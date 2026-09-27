@@ -78,3 +78,8 @@
   .dashboard-workspace{margin-left:58px;width:calc(100% - 58px)}
   .dashboard-main{padding:24px 14px 48px}
 }
+
+.loading-skeleton-list{display:grid;gap:0;margin-top:18px;border-top:1px solid #dddcd4}
+.loading-skeleton-list>div{height:76px;border-bottom:1px solid #dddcd4;background:linear-gradient(90deg,#fffef9 25%,#f0eee7 50%,#fffef9 75%);background-size:200% 100%;animation:detailflow-shimmer 1.15s ease-in-out infinite}
+@keyframes detailflow-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.loading-skeleton-list>div{animation:none;background:#fffef9}}
