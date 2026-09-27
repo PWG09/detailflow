@@ -161,8 +161,16 @@ export async function POST(request: Request) {
       } else {
         const aiRate = await persistentRateLimit(`public-ai:${business.id}`, 20, 60);
         if (aiRate.allowed) {
-          aiAssessment = await assessVehicle(validatedPhotos.slice(0, 4).map((photo) => photo.bytes));
-          await supabase.from('leads').update({ ai_assessment: aiAssessment, ai_assessed_at: new Date().toISOString() }).eq('id', lead.id);
+          try {
+            aiAssessment = await assessVehicle(validatedPhotos.slice(0, 4).map((photo) => photo.bytes));
+            const { error: aiSaveError } = await supabase.from('leads').update({ ai_assessment: aiAssessment, ai_assessed_at: new Date().toISOString() }).eq('id', lead.id);
+            if (aiSaveError) console.error('AI assessment save failed; lead will remain available:', aiSaveError.message);
+          } catch (aiError) {
+            // AI is assistive. A provider timeout/outage must never make a valid
+            // customer request look like it failed.
+            console.error('AI assessment failed; continuing without AI:', aiError instanceof Error ? aiError.message : 'unknown');
+            aiAssessment = null;
+          }
         }
       }
     }
