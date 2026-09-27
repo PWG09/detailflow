@@ -1,284 +1,169 @@
-DetailFlow
+# DetailFlow
 
-A modern SaaS platform for automotive detailers to capture leads, manage customers, create quotes, and collect payments.
+> **The operating system for modern automotive detailing businesses.**
 
-Production: https://detailflow-two.vercel.app
+DetailFlow is a production SaaS platform built for automotive detailers to manage the complete customer journey — from the first inquiry to quoting, customer communication, and payment.
 
-Overview
+It gives detailing businesses a dedicated workflow for capturing leads, organizing customers and vehicles, managing services, generating quotes, and collecting payments while keeping each business's data securely isolated.
 
-DetailFlow gives automotive detail businesses a simple workflow for turning customer inquiries into organized leads and quotes.
+**Production:** [detailflow-two.vercel.app](https://detailflow-two.vercel.app?utm_source=chatgpt.com)
 
-Customers can use a business-specific link such as:
+---
 
+## What is DetailFlow?
+
+Automotive detail businesses often manage customer requests across text messages, social media, spreadsheets, payment links, and disconnected tools.
+
+DetailFlow brings those workflows into one application.
+
+A business can:
+
+1. Configure its business profile.
+2. Create its services and pricing.
+3. Generate a business-specific customer link.
+4. Send that link to potential customers.
+5. Receive structured lead submissions.
+6. Review customer and vehicle information.
+7. Create and send quotes.
+8. Allow customers to review their quotes.
+9. Collect payments through Stripe.
+10. Track the customer throughout the workflow.
+
+The goal is simple:
+
+**Turn a customer inquiry into an organized, actionable business workflow.**
+
+---
+
+# Core Workflow
+
+```text
+                    DETAILFLOW
+                         │
+                         ▼
+              Business creates profile
+                         │
+                         ▼
+               Configure services
+                         │
+                         ▼
+              Generate lead link
+                         │
+                         ▼
+          ┌──────────────────────────┐
+          │     Customer submits     │
+          │      lead request        │
+          └────────────┬─────────────┘
+                       │
+                       ▼
+                  Lead created
+                       │
+                       ▼
+              Business reviews lead
+                       │
+                       ▼
+                  Create quote
+                       │
+                       ▼
+               Customer receives
+                     quote
+                       │
+                       ▼
+              Customer accepts/pays
+                       │
+                       ▼
+                Payment processed
+                       │
+                       ▼
+                 Customer workflow
+                    continues
+```
+
+---
+
+# Customer Lead Links
+
+Every business can have its own public lead intake URL.
+
+Example:
+
+```text
 https://detailflow-two.vercel.app/{business-slug}/lead
+```
 
-That link is tied to the selected business. Submissions are stored only under that business, while the business owner manages the resulting leads from the DetailFlow dashboard.
+The business slug identifies which business owns the submission.
 
-Core workflow
+A customer can use the link to provide information such as:
 
-Business owner
+* Contact information
+* Vehicle information
+* Requested service
+* Project details
+* Photos when applicable
 
-Configure the business.
+The resulting lead is associated with the correct business and is not intended to become globally accessible to other businesses.
 
-Add services and pricing.
+This tenant isolation is enforced through the application's authorization model and database security policies.
 
-Copy the business lead link.
+---
 
-Send the link to customers.
+# Features
 
-Review incoming leads.
+### Lead Management
 
-Create and send quotes.
+* Business-specific public lead links
+* Structured lead intake
+* Customer contact information
+* Vehicle information
+* Lead status management
+* Lead detail views
+* Business-specific lead ownership
 
-Collect payments through Stripe.
+### Customer Management
 
-Customer
+* Customer records
+* Customer history
+* Associated vehicles
+* Lead-to-customer workflows
+* Business-level data isolation
 
-Open the business's lead link.
+### Services
 
-Enter contact and vehicle information.
+Businesses can configure the services they offer, including:
 
-Select a service.
+* Service names
+* Pricing
+* Service descriptions
+* Customer-facing service selection
 
-Add photos when required.
+### Quotes
 
-Submit the request.
+DetailFlow provides a quote workflow for turning leads into customer proposals.
 
-Features
+Capabilities include:
 
-Business-specific customer lead links
+* Quote creation
+* Service selection
+* Pricing
+* Quote lifecycle management
+* Customer-facing quote pages
+* Quote status tracking
+* Payment workflow integration
 
-Lead and customer management
+### Payments
 
-Service management
+DetailFlow integrates with Stripe to support payment workflows.
 
-Quote creation and lifecycle management
+Depending on the business configuration, Stripe Connect can be used to route customer payments to the appropriate business account.
 
-Customer-facing quote pages
+### AI Assistance
 
-Stripe billing and payment infrastructure
+DetailFlow includes AI-assisted functionality for automotive workflows, including vehicle/photo assessment.
 
-Stripe Connect support for business payment accounts
+AI is treated as an assistance layer rather than an authority.
 
-AI-assisted vehicle/photo assessment
+Business rules, authorization, payment state, and security-sensitive decisions remain deterministic application logic.
 
-Private vehicle photo storage
+### Notifications
 
-Supabase Authentication
-
-PostgreSQL + Row Level Security
-
-Transactional email notifications
-
-Responsive dashboard and customer flows
-
-Multi-business data isolation
-
-Tech Stack
-
-Layer
-
-Technology
-
-Frontend
-
-Next.js, React, TypeScript
-
-UI
-
-Tailwind CSS
-
-Backend
-
-Next.js App Router / Route Handlers
-
-Database
-
-Supabase PostgreSQL
-
-Authentication
-
-Supabase Auth
-
-Storage
-
-Supabase Storage
-
-Payments
-
-Stripe + Stripe Connect
-
-AI
-
-NVIDIA NIM / Nemotron
-
-Email
-
-Resend
-
-Hosting
-
-Vercel
-
-Validation
-
-Zod
-
-Testing
-
-Vitest
-
-Project Structure
-
-app/                 Next.js routes, pages, and API endpoints
-components/          Reusable UI components
-lib/                 Application services and business logic
-supabase/
-  migrations/        Database schema, RLS, and security migrations
-public/              Static assets
-types/               Shared TypeScript types
-docs/                Small set of project-specific documentation
-
-Local Development
-
-Requirements
-
-Node.js 20+
-
-npm
-
-Supabase project
-
-Stripe account for billing/payment features
-
-NVIDIA API access for AI features
-
-Resend account for transactional email
-
-Install
-
-npm install
-
-Create a local environment file:
-
-cp .env.example .env.local
-
-On Windows PowerShell:
-
-Copy-Item .env.example .env.local
-
-Add the required environment variables, then start the development server:
-
-npm run dev
-
-Open:
-
-http://localhost:3000
-
-Environment Variables
-
-Secrets must remain server-side. Never commit .env.local or production credentials.
-
-The project uses environment variables for:
-
-Supabase
-
-Stripe
-
-Stripe Connect
-
-NVIDIA
-
-Resend
-
-Application URL
-
-Optional monitoring/security integrations
-
-Use .env.example as the source of truth for variable names.
-
-Database
-
-DetailFlow uses Supabase PostgreSQL with Row Level Security.
-
-Database changes are versioned in:
-
-supabase/migrations/
-
-Business-owned records are isolated by business_id. Authorization is enforced server-side and through database policies.
-
-Apply migrations through the normal Supabase migration workflow before using a new deployment.
-
-Payments
-
-DetailFlow uses Stripe for subscriptions and customer payments.
-
-Stripe Connect is used when a business needs to receive payments from its own customers through DetailFlow.
-
-The application never stores customer card details.
-
-Stripe secrets must only exist in server-side environment variables.
-
-AI
-
-AI functionality is provided through NVIDIA's API.
-
-AI is used as an assistant and assessment layer; it does not replace the application's deterministic business logic or authorization.
-
-AI credentials are server-only.
-
-Deployment
-
-The production application is deployed with Vercel.
-
-Typical deployment flow:
-
-GitHub
-   ↓
-Vercel
-   ↓
-Next.js
-   ↓
-Supabase / Stripe / NVIDIA / Resend
-
-Production environment variables must be configured in Vercel before enabling the corresponding integrations.
-
-Quality
-
-Useful local commands:
-
-npm run typecheck
-npm test
-npm run build
-
-If the repository contains additional scripts, use the scripts defined in package.json as the authoritative commands.
-
-Security
-
-DetailFlow is designed around:
-
-Server-side authorization
-
-Business-level tenant isolation
-
-Supabase Row Level Security
-
-Private customer/vehicle data
-
-Server-only API credentials
-
-Input validation
-
-Rate limiting on sensitive public operations
-
-Stripe webhook verification
-
-Secure public lead/quote flows
-
-Security-sensitive implementation details belong in the project's internal documentation, not in the public README.
-
-License
-
-Private / proprietary software.
-
-Copyright © DetailFlow.
+Transactional email functionality supports customer and business communication through the applicat
