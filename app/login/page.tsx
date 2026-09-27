@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
   const [verificationState, setVerificationState] = useState<'waiting' | 'verified' | 'expired'>('waiting');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -114,7 +113,6 @@ export default function LoginPage() {
         return;
       }
 
-      setVerificationToken(intent.token);
       setVerificationState('waiting');
       setMode('verify');
       startPolling(intent.token);
