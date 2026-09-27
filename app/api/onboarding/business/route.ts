@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     const trialStartedAt = new Date();
     const trialEndsAt = new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const { data, error } = await supabase.from('businesses').insert({ owner_id: user.id, name: parsed.data.name, slug, email: parsed.data.email, phone: parsed.data.phone, description: parsed.data.description }).select('id, slug, trial_status, trial_started_at, trial_ends_at').single();
+    const { data, error } = await supabase.from('businesses').insert({ owner_id: user.id, name: parsed.data.name, slug, email: parsed.data.email, phone: parsed.data.phone, description: parsed.data.description, plan: 'pro', trial_status: 'active', trial_started_at: trialStartedAt.toISOString(), trial_ends_at: trialEndsAt.toISOString(), trial_risk_score: risk.score, trial_risk_level: risk.level, trial_risk_signals: risk.signals }).select('id, slug, trial_status, trial_started_at, trial_ends_at').single();
     if (error?.code === '23505') return NextResponse.json({ error: 'That public link is already taken.' }, { status: 409 });
     if (error) { console.error('Business creation failed', error.message); return NextResponse.json({ error: 'Unable to create the workspace (' + (error.code || 'database') + ').' }, { status: 500 }); }
     try {
