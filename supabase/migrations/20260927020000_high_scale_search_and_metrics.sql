@@ -250,3 +250,37 @@ using (
       and bm.user_id = auth.uid()
   )
 );
+
+-- Replace the team page's N+1 auth.admin.getUserById calls with one indexed SQL query.
+create or replace function public.get_team_members(p_business_id uuid)
+returns table (
+  user_id uuid,
+  role text,
+  created_at timestamptz,
+  email text,
+  name text
+)
+language sql
+security definer
+set search_path = public, auth, pg_temp
+as $$
+  select
+    bm.user_id,
+    bm.role,
+    bm.created_at,
+    u.email::text,
+    nullif(trim(coalesce(u.raw_user_meta_data->>'full_name', '')), '') as name
+  from public.business_members bm
+  join auth.users u on u.id = bm.user_id
+  where bm.business_id = p_business_id
+    and exists (
+      select 1
+      from public.business_members viewer
+      where viewer.business_id = p_business_id
+        and viewer.user_id = auth.uid()
+    )
+  order by bm.created_at asc;
+$$;
+
+revoke all on function public.get_team_members(uuid) from public;
+grant execute on function public.get_team_members(uuid) to authenticated;
