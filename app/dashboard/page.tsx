@@ -17,8 +17,9 @@ export default async function Dashboard() {
     business ? supabase.from('customers').select('id', { count: 'exact', head: true }).eq('business_id', business.id) : Promise.resolve({ count: 0 }),
   ]);
 
-  const trialActive = business?.trial_status === 'active' && business.trial_ends_at && new Date(business.trial_ends_at).getTime() > Date.now();
-  const daysLeft = trialActive ? Math.max(1, Math.ceil((new Date(business.trial_ends_at).getTime() - Date.now()) / 86400000)) : 0;
+  const trialEndsAt = business?.trial_ends_at ? new Date(business.trial_ends_at) : null;
+  const trialActive = business?.trial_status === 'active' && !!trialEndsAt && trialEndsAt.getTime() > Date.now();
+  const daysLeft = trialActive && trialEndsAt ? Math.max(1, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000)) : 0;
 
   return <section className="dashboard-main dashboard-overview">
     <div className="dash-header">
