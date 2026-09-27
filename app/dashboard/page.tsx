@@ -8,11 +8,13 @@ export default async function Dashboard() {
   const firstName = fullName.split(/\s+/)[0];
 
 
-  const [{ count: leadCount }, { count: quoteCount }, { count: customerCount }] = await Promise.all([
-    business ? supabase.from('leads').select('id', { count: 'exact', head: true }).eq('business_id', business.id) : Promise.resolve({ count: 0 }),
-    business ? supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('business_id', business.id) : Promise.resolve({ count: 0 }),
-    business ? supabase.from('customers').select('id', { count: 'exact', head: true }).eq('business_id', business.id) : Promise.resolve({ count: 0 }),
-  ]);
+  const { data: metrics } = business
+    ? await supabase.from('business_metrics').select('leads_count,quotes_count,customers_count,won_leads_count').eq('business_id', business.id).maybeSingle()
+    : { data: null };
+
+  const leadCount = metrics?.leads_count ?? 0;
+  const quoteCount = metrics?.quotes_count ?? 0;
+  const customerCount = metrics?.customers_count ?? 0;
 
   const trialEndsAt = business?.trial_ends_at ? new Date(business.trial_ends_at) : null;
   const trialActive = business?.trial_status === 'active' && !!trialEndsAt && trialEndsAt.getTime() > Date.now();
