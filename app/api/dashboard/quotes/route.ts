@@ -45,10 +45,10 @@ export async function GET(request: Request) {
     if (fallback.error) return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
 
     const fallbackRows = Array.isArray(fallback.data)
-      ? fallback.data.map((quote) => ({
-          ...quote,
-          payment_status: 'unpaid',
-        }))
+      ? fallback.data.map((quote) => {
+          const row = Object.assign({}, quote);
+          return { ...row, payment_status: 'unpaid' };
+        })
       : [];
 
     data = fallbackRows as typeof data;
