@@ -5,6 +5,19 @@ import { decodeCursor, encodeCursor, pageSize } from '@/lib/keyset-pagination';
 
 const quoteSchema = z.object({ leadId: z.string().uuid(), notes: z.string().max(2000).optional().default(''), expiresAt: z.string().datetime().optional() });
 
+type QuoteListRow = {
+  id: string;
+  quote_number: string;
+  status: string;
+  payment_status?: string | null;
+  total: number;
+  expires_at: string | null;
+  created_at: string;
+  lead_id: string;
+  customers?: { first_name: string | null; last_name: string | null } | null;
+  leads?: { vehicle: unknown } | null;
+};
+
 async function context() {
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -45,17 +58,23 @@ export async function GET(request: Request) {
     if (fallback.error) return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
 
     const fallbackRows = Array.isArray(fallback.data)
-      ? fallback.data.map((quote) => Object.assign({}, quote, { payment_status: 'unpaid' }))
+      ? (fallback.data as unknown as QuoteListRow[]).map((quote) =>
+          Object.assign({}, quote, { payment_status: 'unpaid' })
+        )
       : [];
 
     data = fallbackRows as typeof data;
   }
 
-  const rows = data ?? [];
+  const rows: QuoteListRow[] = Array.isArray(data)
+    ? (data as unknown as QuoteListRow[])
+    : [];
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];
-  const nextCursor = hasMore && last ? encodeCursor({ value: last.created_at, id: last.id }) : null;
+  const nextCursor = hasMore && last
+    ? encodeCursor({ value: last.created_at, id: last.id })
+    : null;
 
   return NextResponse.json(
     { data: page, nextCursor, hasMore },
