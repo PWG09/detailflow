@@ -24,7 +24,7 @@ export default function LeadsPage() {
         if (!response.ok) throw new Error(result?.error || 'Unable to load your leads.');
         return result as Lead[];
       })
-      .then(setLeads)
+      .then(result=>{setLeads(result);setOffset(result.length);setHasMore(result.length===50)})
       .catch(error => setError(error instanceof Error ? error.message : 'Unable to load your leads.'))
       .finally(() => setLoading(false));
   }, []);
