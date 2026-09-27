@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if (!membership) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
 
   const url = new URL(request.url);
-  const limit = pageSize(request);
+  const limit = pageSize(request, 50, 100);
   const cursor = decodeCursor(url.searchParams.get('cursor'));
   const query = url.searchParams.get('q')?.trim().slice(0, 80) || '';
 
