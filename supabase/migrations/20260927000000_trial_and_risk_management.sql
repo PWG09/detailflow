@@ -11,7 +11,7 @@ alter table public.businesses add column if not exists trial_risk_signals jsonb 
 
 create table if not exists public.trial_claims (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
   business_id uuid not null references public.businesses(id) on delete cascade,
   email_hash text not null,
   ip_hash text not null,
@@ -40,6 +40,7 @@ create table if not exists public.auth_verification_intents (
   created_at timestamptz not null default now()
 );
 create index if not exists auth_verification_intents_user_idx on public.auth_verification_intents(user_id);
+create index if not exists auth_verification_intents_expires_idx on public.auth_verification_intents(expires_at);
 
 alter table public.trial_claims enable row level security;
 alter table public.auth_verification_intents enable row level security;
