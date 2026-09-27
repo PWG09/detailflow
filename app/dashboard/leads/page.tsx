@@ -15,10 +15,10 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);\n  const [offset, setOffset] = useState(0);\n  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    void fetch('/api/dashboard/leads', { cache: 'no-store' })
+    void fetch('/api/dashboard/leads?limit=50&offset=0', { cache: 'no-store' })
       .then(async response => {
         const result = await response.json().catch(() => null);
         if (!response.ok) throw new Error(result?.error || 'Unable to load your leads.');
@@ -45,7 +45,7 @@ export default function LeadsPage() {
       <label className="lead-search"><Search size={15}/><input aria-label="Search leads" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search vehicle or status" /></label>
       <span className="mono lead-count">{filtered.length} {filtered.length === 1 ? 'lead' : 'leads'}</span>
     </div>
-    {error ? <div className="empty-state"><div className="empty-icon"><ClipboardList size={22}/></div><h2>{error}</h2><p>Refresh the page or check your workspace connection.</p></div>
+    {!loading&&!error&&hasMore&&<div className="load-more"><button className="button-secondary" type="button" onClick={async()=>{const response=await fetch(`/api/dashboard/leads?limit=50&offset=${offset}`,{cache:'no-store'});const result=await response.json().catch(()=>[]);if(response.ok){setLeads(current=>[...current,...result]);setOffset(current=>current+result.length);setHasMore(result.length===50)}}}>Load more</button></div>}\n    {error ? <div className="empty-state"><div className="empty-icon"><ClipboardList size={22}/></div><h2>{error}</h2><p>Refresh the page or check your workspace connection.</p></div>
       : loading ? <div className="empty-state"><p>Loading your lead inbox…</p></div>
       : filtered.length === 0 ? <div className="empty-state"><div className="empty-icon"><ClipboardList size={22}/></div><h2>{query ? 'No matching leads.' : 'No leads yet.'}</h2><p>{query ? 'Try another vehicle, status, or customer search.' : 'When a customer submits your public lead form, their request will appear here.'}</p>{!query&&<Link className="button-primary" href="/dashboard/settings">Share your lead link <Plus size={15}/></Link>}</div>
       : <div className="lead-list">{filtered.map(lead => <Link className="lead-card" href={`/dashboard/leads/${lead.id}`} key={lead.id}><div><strong>{lead.vehicle?.year ?? 'Vehicle'} {lead.vehicle?.makeModel ?? 'details'}</strong><span>{lead.vehicle?.type ?? 'Vehicle'} · {new Date(lead.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div><div className="lead-card-right"><b>{formatEstimate(lead.estimate)}</b><small>{lead.status}</small></div></Link>)}</div>}
