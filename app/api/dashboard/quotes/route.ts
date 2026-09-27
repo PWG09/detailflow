@@ -43,7 +43,8 @@ export async function GET(request: Request) {
     console.error('[quotes] payment-aware query failed:', error.message);
     const fallback = await run(selectBase);
     if (fallback.error) return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
-    data = (fallback.data ?? []).map((quote) => ({ ...quote, payment_status: 'unpaid' }));
+    const fallbackRows = (fallback.data ?? []) as Array<Record<string, unknown>>;
+    data = fallbackRows.map((quote) => ({ ...quote, payment_status: 'unpaid' })) as typeof data;
   }
 
   const rows = data ?? [];
