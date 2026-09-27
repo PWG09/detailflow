@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getDashboardContext } from '@/lib/dashboard-context';
 import DashboardNav from './DashboardNav';
 import './dashboard.css';
 
@@ -10,14 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: membership } = user
-    ? await supabase.from('business_members').select('business_id').eq('user_id', user.id).maybeSingle()
-    : { data: null };
-  const { data: business } = membership
-    ? await supabase.from('businesses').select('name,slug,trial_status,trial_ends_at,plan').eq('id', membership.business_id).maybeSingle()
-    : { data: null };
+  const { user, business } = await getDashboardContext();
   const fullName = user?.user_metadata?.full_name?.trim() || user?.email?.split('@')[0] || 'Business owner';
   const initials = fullName.split(/\s+/).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'U';
   const trialEndsAt = business?.trial_ends_at ? new Date(business.trial_ends_at) : null;
