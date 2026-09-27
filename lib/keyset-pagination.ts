@@ -19,3 +19,7 @@ export function pageSize(request: Request, fallback = 50, maximum = 50) {
   const raw = Number(new URL(request.url).searchParams.get('limit') || fallback);
   return Math.min(maximum, Math.max(1, Number.isFinite(raw) ? raw : fallback));
 }
+
+export function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
