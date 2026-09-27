@@ -71,7 +71,7 @@ export async function middleware(request: NextRequest) {
       const expired = business?.trial_status === 'blocked' ||
         business?.trial_status === 'expired' ||
         (business?.trial_status === 'active' && business.trial_ends_at && new Date(business.trial_ends_at).getTime() <= Date.now());
-      if (expired && business?.plan === 'pro') {
+      if (expired) {
         // Keep the gate time-based so the trial cannot be extended simply by
         // waiting for the scheduled cleanup job.
         if (pathname.startsWith('/api/')) {
