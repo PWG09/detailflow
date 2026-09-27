@@ -10,7 +10,7 @@ export type TrialRiskResult = {
 };
 
 function secret() {
-  return process.env.TRIAL_RISK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'detailflow-trial-risk-dev-secret';
+  return process.env.TRIAL_RISK_SECRET || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'detailflow-trial-risk-dev-secret';
 }
 export function hashRiskValue(value: string) {
   return crypto.createHmac('sha256', secret()).update(value.trim().toLowerCase()).digest('hex');
