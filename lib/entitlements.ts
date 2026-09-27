@@ -21,3 +21,17 @@ export function hasAiAccess(plan?: string | null) {
 export function monthlyLeadLimit(plan?: string | null) {
   return PLAN_LIMITS[normalizePlan(plan)].leadsPerMonth;
 }
+
+
+export function isTrialExpired(trialStatus?: string | null, trialEndsAt?: string | null) {
+  return trialStatus === 'expired' || (trialStatus === 'active' && !!trialEndsAt && new Date(trialEndsAt).getTime() <= Date.now());
+}
+
+export function hasActiveTrial(trialStatus?: string | null, trialEndsAt?: string | null) {
+  return trialStatus === 'active' && !!trialEndsAt && new Date(trialEndsAt).getTime() > Date.now();
+}
+
+export function effectivePlan(input: { plan?: string | null; trialStatus?: string | null; trialEndsAt?: string | null }): Plan {
+  if (hasActiveTrial(input.trialStatus, input.trialEndsAt)) return 'pro';
+  return normalizePlan(input.plan);
+}
