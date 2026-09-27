@@ -83,3 +83,17 @@
 .loading-skeleton-list>div{height:76px;border-bottom:1px solid #dddcd4;background:linear-gradient(90deg,#fffef9 25%,#f0eee7 50%,#fffef9 75%);background-size:200% 100%;animation:detailflow-shimmer 1.15s ease-in-out infinite}
 @keyframes detailflow-shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){.loading-skeleton-list>div{animation:none;background:#fffef9}}
+
+.dashboard-loading-nav{height:42px;border-radius:7px;background:#2b302d;opacity:.75}
+.dashboard-loading-kicker{width:150px;height:12px;border-radius:6px;background:#dddcd4;animation:detailflow-shimmer 1.15s infinite}
+.dashboard-loading-title{width:min(520px,80%);height:52px;border-radius:9px;background:#dddcd4;margin-top:18px;animation:detailflow-shimmer 1.15s infinite}
+.dashboard-loading-copy{width:min(420px,75%);height:14px;border-radius:7px;background:#e3e1d8;margin-top:14px;animation:detailflow-shimmer 1.15s infinite}
+.dashboard-loading-trial{height:92px;background:#dddcd4;margin-top:34px;animation:detailflow-shimmer 1.15s infinite}
+.dashboard-loading-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+.dashboard-loading-metrics>div{height:150px;background:#fffef9;border:1px solid #dddcd4;animation:detailflow-shimmer 1.15s infinite}
+.dashboard-loading-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:14px}
+.dashboard-loading-grid>div{height:250px;background:#fffef9;border:1px solid #dddcd4;animation:detailflow-shimmer 1.15s infinite}
+@media(max-width:1000px){.dashboard-loading-metrics{grid-template-columns:1fr 1fr}.dashboard-loading-grid{grid-template-columns:1fr}}
+@media(max-width:760px){.dashboard-loading-metrics{grid-template-columns:1fr 1fr}.dashboard-loading-title{height:42px}.dashboard-loading-trial{height:120px}}
+@media(max-width:520px){.dashboard-loading-metrics{grid-template-columns:1fr}.dashboard-loading-title{width:90%;height:38px}.dashboard-loading-grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.dashboard-loading-kicker,.dashboard-loading-title,.dashboard-loading-copy,.dashboard-loading-trial,.dashboard-loading-metrics>div,.dashboard-loading-grid>div{animation:none}}
