@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { isReservedBusinessSlug, normalizeBusinessSlug } from '@/lib/slug';
+import { getDeviceFingerprint } from '@/lib/client-device';
 
 export default function OnboardingPage() {
   const router = useRouter();
