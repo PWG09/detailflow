@@ -63,7 +63,7 @@ export async function middleware(request: NextRequest) {
   });
   const { data: { user } } = await supabase.auth.getUser();
   const requiresUser = pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding');
-  const billingProtected = pathname.startsWith('/dashboard') || pathname.startsWith('/api/dashboard/');
+  const billingProtected = (pathname.startsWith('/dashboard') && pathname !== '/dashboard/settings') || (pathname.startsWith('/api/dashboard/') && !pathname.startsWith('/api/dashboard/billing') && pathname !== '/api/dashboard/business');
   if (user && billingProtected) {
     const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', user.id).limit(1).maybeSingle();
     if (membership) {
