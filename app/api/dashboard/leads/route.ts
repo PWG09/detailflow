@@ -1,25 +1,52 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-function pagination(request: Request) {
-  const url = new URL(request.url);
-  const rawLimit = Number(url.searchParams.get('limit') || 50);
-  const rawOffset = Number(url.searchParams.get('offset') || 0);
-  return { limit: Math.min(100, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 50)), offset: Math.max(0, Number.isFinite(rawOffset) ? rawOffset : 0) };
-}
+import { decodeCursor, encodeCursor, escapeLike, pageSize } from '@/lib/keyset-pagination';
 
 export async function GET(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
-  const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', user.id).limit(1).maybeSingle();
+
+  const { data: membership } = await supabase
+    .from('business_members')
+    .select('business_id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle();
   if (!membership) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
-  const { limit, offset } = pagination(request);
-  const { data, error } = await supabase.from('leads')
+
+  const url = new URL(request.url);
+  const limit = pageSize(request);
+  const cursor = decodeCursor(url.searchParams.get('cursor'));
+  const query = url.searchParams.get('q')?.trim().slice(0, 80) || '';
+
+  let requestQuery = supabase
+    .from('leads')
     .select('id,status,vehicle,estimate,created_at')
-    .eq('business_id', membership.business_id)
+    .eq('business_id', membership.business_id);
+
+  if (query) requestQuery = requestQuery.ilike('search_text', `%${escapeLike(query)}%`);
+  if (cursor) {
+    requestQuery = requestQuery.or(
+      `created_at.lt.${cursor.value},and(created_at.eq.${cursor.value},id.lt.${cursor.id})`
+    );
+  }
+
+  const { data, error } = await requestQuery
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+
   if (error) return NextResponse.json({ error: 'Unable to load leads.' }, { status: 500 });
-  return NextResponse.json(data ?? [], { headers: { 'Cache-Control': 'private, no-store' } });
+
+  const rows = data ?? [];
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor({ value: last.created_at, id: last.id }) : null;
+
+  return NextResponse.json(
+    { data: page, nextCursor, hasMore },
+    { headers: { 'Cache-Control': 'private, no-store' } }
+  );
 }
