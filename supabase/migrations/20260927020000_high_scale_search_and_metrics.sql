@@ -221,3 +221,16 @@ on conflict (business_id) do update set
 alter table public.business_metrics enable row level security;
 revoke all on public.business_metrics from anon;
 grant select on public.business_metrics to authenticated;
+
+create policy business_metrics_select_member
+on public.business_metrics
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.business_members bm
+    where bm.business_id = business_metrics.business_id
+      and bm.user_id = auth.uid()
+  )
+);
