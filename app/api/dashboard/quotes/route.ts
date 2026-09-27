@@ -66,12 +66,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
     }
 
-    rows = Array.isArray(fallback.data)
+    const fallbackRows: QuoteListRow[] = Array.isArray(fallback.data)
       ? (fallback.data as unknown as QuoteListRow[]).map((quote) =>
           Object.assign({}, quote, { payment_status: 'unpaid' })
         )
       : [];
+
+    rows = fallbackRows;
   }
+
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];
