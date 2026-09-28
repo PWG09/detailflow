@@ -35,12 +35,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session expired.' }, { status: 410 });
   }
 
-  // The intent is created before Supabase Auth creates the account. At this
-  // point the browser has the user id returned by a successful signUp call.
-  // Bind the intent to the normalized email that originally created the token.
-  // We intentionally do not call auth.admin.getUserById here because that
-  // endpoint can reject a freshly-created auth user during this short window,
-  // even though the signup itself succeeded.
+  // The intent is created before Supabase Auth returns the new user id.
+  // Validate the token against the normalized signup email, then bind the
+  // freshly-created Auth user returned by signUp().
   if (intent.email_hash && intent.email_hash !== emailHash) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
@@ -49,40 +46,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
-  const { data: attached, error: updateError } = await admin
+  // Do not request a representation from PostgREST here. The verification
+  // table is server-only and some Supabase configurations can reject a
+  // returning SELECT even when the UPDATE itself is authorized.
+  const { error: updateError } = await admin
     .from('auth_verification_intents')
     .update({
       user_id: parsed.data.userId,
       email_hash: emailHash,
     })
     .eq('id', intent.id)
-    .is('user_id', null)
-    .select('id,user_id')
-    .maybeSingle();
+    .is('user_id', null);
 
   if (updateError) {
     console.error('Verification intent attachment failed:', updateError.message);
     return NextResponse.json({ error: 'Unable to save verification session.' }, { status: 500 });
   }
 
-  // Another request may have attached the same intent between the lookup and
-  // update. Treat an already-correct attachment as success, but never allow
-  // it to be rebound to another account.
-  if (!attached) {
-    const { data: current, error: currentError } = await admin
-      .from('auth_verification_intents')
-      .select('user_id')
-      .eq('id', intent.id)
-      .maybeSingle();
+  // Verify the attachment after the write. This also handles a concurrent
+  // request that may have attached the intent first.
+  const { data: current, error: currentError } = await admin
+    .from('auth_verification_intents')
+    .select('user_id')
+    .eq('id', intent.id)
+    .maybeSingle();
 
-    if (currentError) {
-      console.error('Verification intent recheck failed:', currentError.message);
-      return NextResponse.json({ error: 'Unable to verify signup session.' }, { status: 500 });
-    }
+  if (currentError) {
+    console.error('Verification intent attachment check failed:', currentError.message);
+    return NextResponse.json({ error: 'Unable to verify signup session.' }, { status: 500 });
+  }
 
-    if (current?.user_id !== parsed.data.userId) {
-      return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
-    }
+  if (current?.user_id !== parsed.data.userId) {
+    return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
   return NextResponse.json({ ok: true });
