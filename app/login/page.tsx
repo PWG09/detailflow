@@ -19,19 +19,30 @@ export default function LoginPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  async function finishVerifiedSignup() {
+  async function finishVerifiedSignup(autoSignIn = true) {
     setVerificationState('verified');
     if (pollRef.current) clearInterval(pollRef.current);
+
+    // The original signup tab has the password and can finish automatically.
+    // A verification link opened on another device cannot know the password,
+    // so that device should simply return to sign-in.
+    if (!autoSignIn || !email || !password) {
+      setMode('login');
+      setMessage('Your email is verified. Sign in with your password to continue.');
+      return;
+    }
+
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
+      setMode('login');
       setMessage('Your email is verified. Sign in once to continue.');
       return;
     }
     window.location.assign('/onboarding');
   }
 
-  function startPolling(token: string) {
+  function startPolling(token: string, autoSignIn = true) {
     if (pollRef.current) clearInterval(pollRef.current);
     const poll = async () => {
       try {
@@ -42,7 +53,7 @@ export default function LoginPage() {
           return;
         }
         const result = await response.json().catch(() => null);
-        if (result?.verified) await finishVerifiedSignup();
+        if (result?.verified) await finishVerifiedSignup(autoSignIn);
       } catch {
         // Temporary network failures are retried on the next interval.
       }
@@ -50,6 +61,20 @@ export default function LoginPage() {
     void poll();
     pollRef.current = setInterval(() => void poll(), 2500);
   }
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('verify')?.trim();
+    if (!token) return;
+
+    setMode('verify');
+    setVerificationState('waiting');
+    setMessage('');
+    startPolling(token, false);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
