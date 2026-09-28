@@ -162,3 +162,12 @@
 @media(max-width:800px){.customer-profile-hero{align-items:flex-start;flex-direction:column}.customer-profile-actions{justify-content:flex-start;width:100%}.customer-profile-actions a{flex:1;justify-content:center}.customer-summary-grid{grid-template-columns:1fr}.customer-profile-heading h1{font-size:34px}.customer-profile-grid{grid-template-columns:1fr}.pricing{grid-template-columns:1fr}}
 @media(max-width:560px){.customer-profile-hero{padding:22px 0}.customer-profile-heading{align-items:flex-start}.customer-avatar{width:54px;height:54px;flex-basis:54px;font-size:15px}.customer-profile-heading h1{font-size:29px}.customer-profile-heading p{line-height:1.5}.customer-profile-actions a{width:100%;flex:1 1 100%}.customer-history-card,.customer-info-card{padding:20px}.customer-lead-row{grid-template-columns:34px 1fr 18px;gap:9px}.customer-lead-icon{width:34px;height:34px}.customer-lead-meta{grid-column:2;text-align:left;min-width:0;margin-top:-4px}.customer-lead-meta b,.customer-lead-meta .customer-lead-status,.customer-lead-meta small{display:inline-block;margin-right:6px}.customer-lead-arrow{grid-column:3;grid-row:1 / span 2}.customer-card{align-items:flex-start}.customer-card-action small{display:none}.customer-card-action span{margin-top:3px}.customer-card-main{align-items:flex-start}.customer-card-avatar{width:36px;height:36px;flex-basis:36px}}
 @media(prefers-reduced-motion:reduce){.customer-card,.customer-lead-row{transition:none}}
+
+/* Dashboard layout consistency */
+.dashboard-content-grid{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:14px;align-items:start;margin-top:34px}
+.dashboard-content-grid>.empty-state{margin-top:0}
+.lead-card-right{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.lead-card-right select{border:1px solid #dddcd4;background:#fffef9;color:#202321;padding:9px 10px;font-size:11px;min-height:40px}
+.lead-card-right .button-secondary{min-height:40px;padding:9px 12px}
+@media(max-width:900px){.dashboard-content-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.dashboard-content-grid{gap:12px}.lead-card{align-items:flex-start}.lead-card-right{width:100%;justify-content:flex-start}.lead-card-right select{flex:1;min-width:120px}.lead-card-right .button-secondary{flex:1;justify-content:center}.lead-card{flex-wrap:wrap}}
