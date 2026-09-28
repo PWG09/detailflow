@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 const schema = z.object({
   token: z.string().min(32).max(128),
   userId: z.string().uuid(),
+  email: z.string().email().max(320),
 });
 
 export async function POST(request: Request) {
@@ -14,7 +15,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid verification session.' }, { status: 400 });
   }
 
+  const email = parsed.data.email.trim().toLowerCase();
   const tokenHash = hashRiskValue(parsed.data.token);
+  const emailHash = hashRiskValue(email);
   const admin = createSupabaseAdminClient();
 
   const { data: intent, error: intentError } = await admin
@@ -32,20 +35,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session expired.' }, { status: 410 });
   }
 
-  // A token can only be attached to the account created for the same email.
-  // We derive the email from Supabase Auth instead of trusting browser-provided
-  // email input, avoiding false mismatches caused by client-side normalization.
-  const { data, error } = await admin.auth.admin.getUserById(parsed.data.userId);
-  const userEmail = data.user?.email?.trim().toLowerCase();
-
-  if (error || !data.user || !userEmail) {
-    console.error('Verification user lookup failed:', error?.message || 'user not found');
-    return NextResponse.json({ error: 'Unable to verify signup account.' }, { status: 409 });
-  }
-
-  const userEmailHash = hashRiskValue(userEmail);
-
-  if (intent.email_hash && intent.email_hash !== userEmailHash) {
+  // The intent is created before Supabase Auth creates the account. At this
+  // point the browser has the user id returned by a successful signUp call.
+  // Bind the intent to the normalized email that originally created the token.
+  // We intentionally do not call auth.admin.getUserById here because that
+  // endpoint can reject a freshly-created auth user during this short window,
+  // even though the signup itself succeeded.
+  if (intent.email_hash && intent.email_hash !== emailHash) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
@@ -53,18 +49,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
-  const { error: updateError } = await admin
+  const { data: attached, error: updateError } = await admin
     .from('auth_verification_intents')
     .update({
       user_id: parsed.data.userId,
-      email_hash: userEmailHash,
+      email_hash: emailHash,
     })
     .eq('id', intent.id)
-    .is('user_id', null);
+    .is('user_id', null)
+    .select('id,user_id')
+    .maybeSingle();
 
   if (updateError) {
     console.error('Verification intent attachment failed:', updateError.message);
     return NextResponse.json({ error: 'Unable to save verification session.' }, { status: 500 });
+  }
+
+  // Another request may have attached the same intent between the lookup and
+  // update. Treat an already-correct attachment as success, but never allow
+  // it to be rebound to another account.
+  if (!attached) {
+    const { data: current, error: currentError } = await admin
+      .from('auth_verification_intents')
+      .select('user_id')
+      .eq('id', intent.id)
+      .maybeSingle();
+
+    if (currentError) {
+      console.error('Verification intent recheck failed:', currentError.message);
+      return NextResponse.json({ error: 'Unable to verify signup session.' }, { status: 500 });
+    }
+
+    if (current?.user_id !== parsed.data.userId) {
+      return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
+    }
   }
 
   return NextResponse.json({ ok: true });
