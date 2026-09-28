@@ -7,7 +7,7 @@ type Lead = { id:string; vehicle:{year?:string;makeModel?:string}|null; estimate
 type QuoteResponse = { data:Quote[]; nextCursor:string|null; hasMore:boolean };
 type LeadResponse = { data:Lead[]; nextCursor:string|null; hasMore:boolean };
 export default function QuotesPage(){
- const [quotes,setQuotes]=useState<Quote[]>([]);const [leads,setLeads]=useState<Lead[]>([]);const [leadId,setLeadId]=useState('');const [notes,setNotes]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);const [quoteCursor,setQuoteCursor]=useState<string|null>(null);const [hasMoreQuotes,setHasMoreQuotes]=useState(true);const [loading,setLoading]=useState(true);const [loadingMore,setLoadingMore]=useState(false);
+ const [quotes,setQuotes]=useState<Quote[]>([]);const [leads,setLeads]=useState<Lead[]>([]);const [leadId,setLeadId]=useState('');const [price,setPrice]=useState('');const [notes,setNotes]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);const [quoteCursor,setQuoteCursor]=useState<string|null>(null);const [hasMoreQuotes,setHasMoreQuotes]=useState(true);const [loading,setLoading]=useState(true);const [loadingMore,setLoadingMore]=useState(false);
  const selectedLead=useMemo(()=>leads.find(lead=>lead.id===leadId)??null,[leads,leadId]);
  const minimum=selectedLead?.estimate?.minimum; const maximum=selectedLead?.estimate?.maximum;
  function handleLeadChange(next:string){setLeadId(next);const lead=leads.find(item=>item.id===next);const suggested=lead?.estimate?.maximum??lead?.estimate?.minimum;setPrice(suggested!=null?String(suggested):'');setMessage('');}
