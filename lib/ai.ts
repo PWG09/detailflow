@@ -109,7 +109,7 @@ export async function assessVehicle(images: Uint8Array[], signal?: AbortSignal):
             ],
           },
         ],
-        max_tokens: 1200,
+        max_tokens: 800,
         temperature: 0.2,
         top_p: 0.95,
         stream: false,
