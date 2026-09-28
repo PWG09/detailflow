@@ -54,13 +54,29 @@ export async function POST(request: Request) {
   const admin = createSupabaseAdminClient();
   const { data: lead, error: leadError } = await admin
     .from('leads')
-    .select('id,business_id,photo_paths')
+    .select('id,business_id,photo_paths,ai_assessment,ai_assessed_at')
     .eq('id', parsed.data.leadId)
     .eq('business_id', membership.business_id)
     .single();
 
   if (leadError || !lead) {
     return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
+  }
+
+  // An AI assessment is a stored result, not a chat session. Never spend
+  // provider tokens re-running the same lead once a valid assessment exists.
+  if (lead.ai_assessed_at && lead.ai_assessment) {
+    return NextResponse.json({ assessment: lead.ai_assessment, cached: true });
+  }
+
+  // Also serialize attempts per lead. This closes the concurrent-request race
+  // where two clicks/tabs could otherwise send the same photos to the provider.
+  const leadThrottle = await persistentRateLimit(`dashboard-ai-lead:${membership.business_id}:${lead.id}`, 1, 10 * 60);
+  if (!leadThrottle.allowed) {
+    return NextResponse.json(
+      { error: 'This lead is already being assessed or was assessed recently. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.max(1, Math.ceil(leadThrottle.retryAfter / 1000))) } },
+    );
   }
 
   // Recover older leads where the photos were successfully uploaded to
