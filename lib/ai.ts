@@ -60,7 +60,7 @@ export async function assessVehicle(images: Uint8Array[], signal?: AbortSignal):
   if (!apiKey) throw new Error('AI API key is not configured in Vercel.');
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
+  const timer = setTimeout(() => controller.abort(), 60000);
   const abortForwarder = signal ? () => controller.abort() : undefined;
   signal?.addEventListener('abort', abortForwarder!);
 
