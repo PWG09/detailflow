@@ -126,6 +126,17 @@ export default function LoginPage() {
         return;
       }
 
+      // With email confirmations enabled, Supabase intentionally returns an
+      // obfuscated/fake user when signUp() is called for an existing confirmed
+      // account. Those users are not present in auth.users, so never attach
+      // that id to our verification intent.
+      if (result.data.user.identities?.length === 0) {
+        setMessage('An account with this email already exists. Please sign in instead.');
+        setMode('login');
+        setBusy(false);
+        return;
+      }
+
       const attachResponse = await fetch('/api/auth/verification-intent/attach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
