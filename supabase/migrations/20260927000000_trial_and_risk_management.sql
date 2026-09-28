@@ -31,14 +31,22 @@ create index if not exists trial_claims_device_hash_idx on public.trial_claims(d
 create index if not exists trial_claims_phone_hash_idx on public.trial_claims(phone_hash);
 create index if not exists trial_claims_payment_hash_idx on public.trial_claims(payment_fingerprint_hash);
 
+-- Verification intents are created before Supabase Auth returns the new user id.
+-- Keep user_id nullable until the signup user can be attached.
 create table if not exists public.auth_verification_intents (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  email_hash text,
   token_hash text not null unique,
   expires_at timestamptz not null,
   verified_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.auth_verification_intents
+  alter column user_id drop not null;
+alter table public.auth_verification_intents
+  add column if not exists email_hash text;
+
 create index if not exists auth_verification_intents_user_idx on public.auth_verification_intents(user_id);
 create index if not exists auth_verification_intents_expires_idx on public.auth_verification_intents(expires_at);
 
