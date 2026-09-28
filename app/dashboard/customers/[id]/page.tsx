@@ -126,7 +126,7 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
             <div className="customer-inline-error">
               <ClipboardList size={18} />
               <div>
-                <strong>We couldn't load the request history.</strong>
+                <strong>We couldn&apos;t load the request history.</strong>
                 <span>The customer profile is available, but the lead history could not be read right now.</span>
               </div>
             </div>
@@ -181,7 +181,7 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
 
           <div className="customer-repeat-note">
             <Repeat2 size={17} />
-            <p><strong>Repeat customer</strong> is calculated from this customer's lead history: every request after their first one counts as a return request.</p>
+            <p><strong>Repeat customer</strong> is calculated from this customer&apos;s lead history: every request after their first one counts as a return request.</p>
           </div>
         </aside>
       </div>
