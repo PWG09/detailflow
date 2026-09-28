@@ -9,6 +9,8 @@ const schema = z.object({
   email: z.string().email().max(320),
 });
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (intentError) {
-    console.error('Verification intent lookup failed:', intentError.message);
+    console.error('Verification intent lookup failed:', intentError);
     return NextResponse.json({ error: 'Unable to verify signup session.' }, { status: 500 });
   }
 
@@ -35,9 +37,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session expired.' }, { status: 410 });
   }
 
-  // The intent is created before Supabase Auth returns the new user id.
-  // Validate the token against the normalized signup email, then bind the
-  // freshly-created Auth user returned by signUp().
   if (intent.email_hash && intent.email_hash !== emailHash) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
@@ -46,25 +45,42 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
-  // Do not request a representation from PostgREST here. The verification
-  // table is server-only and some Supabase configurations can reject a
-  // returning SELECT even when the UPDATE itself is authorized.
-  const { error: updateError } = await admin
-    .from('auth_verification_intents')
-    .update({
-      user_id: parsed.data.userId,
-      email_hash: emailHash,
-    })
-    .eq('id', intent.id)
-    .is('user_id', null);
+  let lastUpdateError: unknown = null;
 
-  if (updateError) {
-    console.error('Verification intent attachment failed:', updateError.message);
+  // Supabase Auth can return the newly-created user before the transaction
+  // behind auth.users is fully visible to the database connection used here.
+  // Retry the FK-backed attachment briefly instead of failing the signup.
+  for (const delay of [0, 250, 750, 1500, 2500]) {
+    if (delay) await sleep(delay);
+
+    const { error: updateError } = await admin
+      .from('auth_verification_intents')
+      .update({
+        user_id: parsed.data.userId,
+        email_hash: emailHash,
+      })
+      .eq('id', intent.id)
+      .is('user_id', null);
+
+    if (!updateError) {
+      lastUpdateError = null;
+      break;
+    }
+
+    lastUpdateError = updateError;
+    console.error('Verification intent attachment attempt failed:', {
+      message: updateError.message,
+      code: updateError.code,
+      details: updateError.details,
+      hint: updateError.hint,
+      attemptDelayMs: delay,
+    });
+  }
+
+  if (lastUpdateError) {
     return NextResponse.json({ error: 'Unable to save verification session.' }, { status: 500 });
   }
 
-  // Verify the attachment after the write. This also handles a concurrent
-  // request that may have attached the intent first.
   const { data: current, error: currentError } = await admin
     .from('auth_verification_intents')
     .select('user_id')
@@ -72,7 +88,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (currentError) {
-    console.error('Verification intent attachment check failed:', currentError.message);
+    console.error('Verification intent attachment check failed:', currentError);
     return NextResponse.json({ error: 'Unable to verify signup session.' }, { status: 500 });
   }
 
