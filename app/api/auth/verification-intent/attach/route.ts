@@ -6,7 +6,6 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 const schema = z.object({
   token: z.string().min(32).max(128),
   userId: z.string().uuid(),
-  email: z.string().email().max(320),
 });
 
 export async function POST(request: Request) {
@@ -15,9 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid verification session.' }, { status: 400 });
   }
 
-  const email = parsed.data.email.trim().toLowerCase();
   const tokenHash = hashRiskValue(parsed.data.token);
-  const emailHash = hashRiskValue(email);
   const admin = createSupabaseAdminClient();
 
   const { data: intent, error: intentError } = await admin
@@ -35,9 +32,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session expired.' }, { status: 410 });
   }
 
-  // Bind the token to the email that originally requested the verification.
-  // This prevents a valid token from being attached to another account.
-  if (intent.email_hash && intent.email_hash !== emailHash) {
+  // A token can only be attached to the account created for the same email.
+  // We derive the email from Supabase Auth instead of trusting browser-provided
+  // email input, avoiding false mismatches caused by client-side normalization.
+  const { data, error } = await admin.auth.admin.getUserById(parsed.data.userId);
+  const userEmail = data.user?.email?.trim().toLowerCase();
+
+  if (error || !data.user || !userEmail) {
+    console.error('Verification user lookup failed:', error?.message || 'user not found');
+    return NextResponse.json({ error: 'Unable to verify signup account.' }, { status: 409 });
+  }
+
+  const userEmailHash = hashRiskValue(userEmail);
+
+  if (intent.email_hash && intent.email_hash !== userEmailHash) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
@@ -45,18 +53,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
   }
 
-  const { data, error } = await admin.auth.admin.getUserById(parsed.data.userId);
-  const userEmail = data.user?.email?.trim().toLowerCase();
-
-  if (error || !data.user || userEmail !== email) {
-    return NextResponse.json({ error: 'Verification session mismatch.' }, { status: 409 });
-  }
-
   const { error: updateError } = await admin
     .from('auth_verification_intents')
     .update({
       user_id: parsed.data.userId,
-      email_hash: emailHash,
+      email_hash: userEmailHash,
     })
     .eq('id', intent.id)
     .is('user_id', null);
