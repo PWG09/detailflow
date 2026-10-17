@@ -172,4 +172,4 @@ Business rules, authorization, payment state, and security-sensitive decisions r
 
 ### Notifications
 
-Transactional email functionality supports customer and business communication through the applicat
+Account emails (email verification, password reset and team invitations) are sent by Supabase Auth through the project's custom SMTP. New leads are surfaced in the business dashboard.

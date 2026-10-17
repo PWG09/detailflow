@@ -4,7 +4,6 @@ import { publicQuoteSchema } from '@/lib/validation/public-quote';
 import { getClientIp, persistentRateLimit, verifyTurnstile } from '@/lib/security';
 import { isPro, monthlyLeadLimit } from '@/lib/entitlements';
 import { assessVehicle } from '@/lib/ai';
-import { sendEmail, emailShell, escapeHtml } from '@/lib/email';
 import { normalizeBusinessSlug } from '@/lib/slug';
 
 export const runtime = 'nodejs';
@@ -175,17 +174,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // No transactional email provider is configured: new leads are surfaced in
+    // the business dashboard. Account emails are sent by Supabase Auth.
     const estimate = { minimum: service.minimum_price, maximum: service.maximum_price, currency: 'USD' };
-    const businessEmail = business.email;
-    const serviceLabel = service.name || input.serviceName;
-    if (input.email) {
-      try { await sendEmail({ to: input.email, subject: `Quote request received — ${business.name}`, html: emailShell('Request received', `<p>Hi ${escapeHtml(input.firstName)},</p><p>Your quote request for <strong>${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}</strong> was sent to ${escapeHtml(business.name)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p>The business will review your request and contact you with the next step.</p>`) }); } catch (error) { console.error('Customer confirmation email failed', error); }
-    }
-    if (businessEmail) {
-      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://detailflow-two.vercel.app').replace(/\/+$/, '');
-      const leadUrl = `${appUrl}/dashboard/leads/${lead.id}`;
-      try { await sendEmail({ to: businessEmail, subject: `New lead — ${input.firstName} ${input.lastName}`, html: emailShell('New lead received', `<p><strong>${escapeHtml(input.firstName)} ${escapeHtml(input.lastName)}</strong> requested ${escapeHtml(serviceLabel)} for ${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}.</p><p>Estimated range: <strong>$${service.minimum_price}–$${service.maximum_price}</strong>.</p><p style="margin-top:24px"><a href="${leadUrl}" style="display:inline-block;background:#15231e;color:#fff;padding:12px 18px;text-decoration:none;border-radius:8px">Open lead in DetailFlow</a></p><p style="color:#6b7280;font-size:12px">Lead ID: ${escapeHtml(lead.id)}</p>`) }); } catch (error) { console.error('Lead notification email failed', error); }
-    }
 
     return NextResponse.json({ leadId: lead.id, estimate, aiAssessment }, { status: 201 });
   } catch (error) {

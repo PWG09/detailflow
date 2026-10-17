@@ -43,10 +43,25 @@ privado `vehicle-photos`.
 - Email provider: activado. **Confirm email: activado** (el registro espera la verificación).
 - Longitud mínima de contraseña: 8.
 
-*Authentication → Emails → SMTP Settings* (**obligatorio en producción**: el
-correo integrado de Supabase solo envía unos pocos correos por hora)
-- Con Resend: host `smtp.resend.com`, puerto `465`, usuario `resend`,
-  contraseña = tu `RESEND_API_KEY`, remitente con un dominio verificado en Resend.
+*Authentication → Emails → SMTP Settings* → **Enable custom SMTP**
+(**obligatorio en producción**). Sin SMTP propio, Supabase solo entrega correos
+a los miembros del equipo del proyecto ("Email address not authorized" para el
+resto) y con un límite muy bajo por hora. Todos los correos de la app
+(verificación, recuperar contraseña, invitaciones de equipo) los envía Supabase
+Auth por este SMTP; la app no usa ningún otro proveedor de correo.
+
+Ejemplos de SMTP:
+- **Gmail / Google Workspace**: host `smtp.gmail.com`, puerto `465`, usuario =
+  tu dirección, contraseña = una *contraseña de aplicación* (requiere verificación
+  en dos pasos). Límite de Gmail: ~500 correos/día.
+- **Brevo** (plan gratuito, 300/día): host `smtp-relay.brevo.com`, puerto `587`,
+  usuario y clave SMTP desde *Brevo → SMTP & API*.
+
+Después sube el límite en *Authentication → Rate Limits → emails per hour*
+(p. ej. 100).
+
+Los avisos de "nuevo lead" no se envían por correo: los negocios ven los leads
+en el panel.
 
 ## 3. Supabase: claves
 
@@ -84,7 +99,6 @@ correo integrado de Supabase solo envía unos pocos correos por hora)
 | `STRIPE_APPLICATION_FEE_PERCENT` | p. ej. `2.5` |
 | `AI_API_KEY` | clave de NVIDIA NIM (o compatible OpenAI) |
 | `AI_BASE_URL` / `AI_MODEL` | opcionales; por defecto NVIDIA |
-| `RESEND_API_KEY` / `EMAIL_FROM` | correo transaccional |
 | `NEXT_PUBLIC_CONTACT_EMAIL` / `NEXT_PUBLIC_CONTACT_ADDRESS` | páginas legales/contacto |
 | `TRIAL_RISK_SECRET` | cadena aleatoria larga (`openssl rand -hex 32`) |
 | `CRON_SECRET` | cadena aleatoria larga; Vercel la envía al cron diario |
