@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getAppUrl, getStripe } from '@/lib/stripe';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import Stripe from 'stripe';
 const paramsSchema=z.object({quoteId:z.string().uuid()});
 export const runtime='nodejs';
@@ -28,7 +29,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{quoteId:st
   const sessionParams: Stripe.Checkout.SessionCreateParams={mode:'payment',customer_email:customer?.email||undefined,line_items:[{price_data:{currency,product_data:{name:`Quote ${quote.quote_number}`},unit_amount:amount},quantity:1}],metadata:{quoteId:quote.id,businessId:membership.business_id,connectedAccountId:business.stripe_connected_account_id,platformFeeAmount:String(fee)},payment_intent_data:{application_fee_amount:fee,transfer_data:{destination:business.stripe_connected_account_id},metadata:{quoteId:quote.id,businessId:membership.business_id}},success_url:`${getAppUrl()}/quote/payment/success?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${getAppUrl()}/quote/payment/cancelled`};
   const session=(await stripe.checkout.sessions.create(sessionParams,{idempotencyKey:`quote-payment:${quote.id}`})) as unknown as Stripe.Checkout.Session;
   if(!session.url)return NextResponse.json({error:'Stripe did not return a checkout URL.'},{status:502});
-  const {error:updateError}=await supabase.from('quotes').update({payment_status:'pending',stripe_checkout_session_id:session.id,updated_at:new Date().toISOString()}).eq('id',quote.id).eq('business_id',membership.business_id);if(updateError)return NextResponse.json({error:'Stripe checkout was created, but the quote could not be updated. Please do not create another payment yet.'},{status:500});
+  const {error:updateError}=await createSupabaseAdminClient().from('quotes').update({payment_status:'pending',stripe_checkout_session_id:session.id,updated_at:new Date().toISOString()}).eq('id',quote.id).eq('business_id',membership.business_id);if(updateError)return NextResponse.json({error:'Stripe checkout was created, but the quote could not be updated. Please do not create another payment yet.'},{status:500});
   return NextResponse.json({url:session.url,platformFeePercent:feePercent});
  }catch(error){console.error('Stripe Connect quote checkout failed:',error instanceof Error?error.message:'unknown');return NextResponse.json({error:'Stripe could not start the payment. Check the live connected account and platform configuration.'},{status:502});}
 }

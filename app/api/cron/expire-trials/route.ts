@@ -16,5 +16,10 @@ export async function GET(request: Request) {
     console.error('Trial expiry job failed:', error.message);
     return NextResponse.json({ error: 'Trial expiry job failed.' }, { status: 500 });
   }
-  return NextResponse.json({ expired: data?.length ?? 0 });
+
+  // Housekeeping is best-effort: a failure here must not hide the trial result.
+  const { data: cleanup, error: cleanupError } = await admin.rpc('cleanup_security_state');
+  if (cleanupError) console.error('Security state cleanup failed:', cleanupError.message);
+
+  return NextResponse.json({ expired: data?.length ?? 0, cleanup: Array.isArray(cleanup) ? cleanup[0] ?? null : null });
 }

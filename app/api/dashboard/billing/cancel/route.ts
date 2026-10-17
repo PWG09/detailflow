@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getStripe } from '@/lib/stripe';
 import Stripe from 'stripe';
 
@@ -33,7 +34,7 @@ export async function POST() {
       ? new Date(currentPeriodEnd * 1000).toISOString()
       : null;
 
-    const { error: syncError } = await supabase.from('subscriptions').update({
+    const { error: syncError } = await createSupabaseAdminClient().from('subscriptions').update({
       cancel_at_period_end: true,
       status: subscription.status,
       current_period_end: currentPeriodEndIso,

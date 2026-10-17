@@ -2,6 +2,7 @@ const RESERVED_BUSINESS_SLUGS = new Set([
   'api', '_next', 'dashboard', 'login', 'onboarding', 'quote', 'q', 'features',
   'pricing', 'faq', 'contact', 'privacy', 'terms', 'refunds', 'cookies',
   'reset-password', 'update-password', 'auth', 'favicon', 'robots', 'sitemap',
+  'upgrade', 'icon', 'opengraph-image',
 ]);
 
 export function normalizeBusinessSlug(value: string): string {

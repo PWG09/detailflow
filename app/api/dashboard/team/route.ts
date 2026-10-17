@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { effectivePlan, PLAN_LIMITS } from '@/lib/entitlements';
+import { getAppUrl } from '@/lib/stripe';
 
 const inviteSchema = z.object({ email: z.string().email(), role: z.literal('staff').default('staff') });
 
@@ -28,7 +30,12 @@ export async function POST(request: Request) {
   const parsed = inviteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Enter a valid email.' }, { status: 400 });
   const admin = createSupabaseAdminClient();
-  const { data: invite, error } = await admin.auth.admin.inviteUserByEmail(parsed.data.email);
+  const { data: business } = await admin.from('businesses').select('plan,trial_status,trial_ends_at').eq('id', ctx.m.business_id).single();
+  const seatLimit = PLAN_LIMITS[effectivePlan({ plan: business?.plan, trialStatus: business?.trial_status, trialEndsAt: business?.trial_ends_at })].teamMembers;
+  const { count: memberCount, error: countError } = await admin.from('business_members').select('user_id', { count: 'exact', head: true }).eq('business_id', ctx.m.business_id);
+  if (countError) return NextResponse.json({ error: 'Unable to check your team size.' }, { status: 500 });
+  if ((memberCount ?? 0) >= seatLimit) return NextResponse.json({ error: `Your plan includes ${seatLimit} team member${seatLimit === 1 ? '' : 's'}. Upgrade to invite more people.` }, { status: 402 });
+  const { data: invite, error } = await admin.auth.admin.inviteUserByEmail(parsed.data.email, { redirectTo: `${getAppUrl()}/update-password` });
   if (error || !invite.user) return NextResponse.json({ error: error?.message || 'Unable to create invitation.' }, { status: 400 });
   const { error: memberError } = await admin.from('business_members').upsert({ business_id: ctx.m.business_id, user_id: invite.user.id, role: 'staff' }, { onConflict: 'business_id,user_id' });
   if (memberError) return NextResponse.json({ error: 'Invite was created, but membership could not be saved.' }, { status: 500 });

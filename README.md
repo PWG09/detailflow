@@ -6,7 +6,7 @@ DetailFlow is a production SaaS platform built for automotive detailers to manag
 
 It gives detailing businesses a dedicated workflow for capturing leads, organizing customers and vehicles, managing services, generating quotes, and collecting payments while keeping each business's data securely isolated.
 
-**Production:** [detailflow-two.vercel.app](https://detailflow-two.vercel.app?utm_source=chatgpt.com)
+**Production:** [detailflow-two.vercel.app](https://detailflow-two.vercel.app)
 
 ---
 
@@ -32,6 +32,12 @@ A business can:
 The goal is simple:
 
 **Turn a customer inquiry into an organized, actionable business workflow.**
+
+---
+
+# Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full production checklist (Supabase migrations and Auth settings, Stripe webhooks, Vercel environment variables, smoke test).
 
 ---
 
