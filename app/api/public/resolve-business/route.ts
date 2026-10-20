@@ -6,13 +6,14 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestedSlug = (searchParams.get('slug') ?? '').trim().toLowerCase();
+  if (requestedSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requestedSlug)) return NextResponse.json({ error: 'This business lead link is not available.' }, { status: 404 });
 
   if (!requestedSlug) return NextResponse.json({ error: 'Missing business slug.' }, { status: 400 });
 
   const supabase = createSupabaseAdminClient();
   const { data: business, error: businessError } = await supabase
     .from('businesses')
-    .select('id,slug,name,description')
+    .select('id,slug,name,description,currency')
     .eq('slug', requestedSlug)
     .maybeSingle();
 
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
     slug: business.slug,
     name: business.name,
     description: business.description,
+    currency: (business.currency || 'USD').toUpperCase(),
     services: services ?? [],
     leadUrl: `/${business.slug}/lead`,
   }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
