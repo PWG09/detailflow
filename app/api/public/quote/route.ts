@@ -4,9 +4,7 @@ import { publicQuoteSchema } from '@/lib/validation/public-quote';
 import { getClientIp, persistentRateLimit, verifyTurnstile } from '@/lib/security';
 import { effectivePlan, monthlyLeadLimit, PLAN_LIMITS } from '@/lib/entitlements';
 import { assessVehicle } from '@/lib/ai';
-import { sendEmail, emailShell, escapeHtml } from '@/lib/email';
 import { normalizeBusinessSlug } from '@/lib/slug';
-import { formatMoney } from '@/lib/quote-math';
 import { MAX_LEAD_PHOTOS, MAX_PHOTO_BYTES, MAX_TOTAL_PHOTO_BYTES, sniffImage, type ImageKind } from '@/lib/uploads';
 
 export const runtime = 'nodejs';
@@ -193,45 +191,26 @@ export async function POST(request: Request) {
     }
   }
 
-  // Everything below is assistive. It runs after the response is sent so a slow
-  // AI provider or email outage can never make a saved request look failed.
-  const range = estimate.minimum === estimate.maximum
-    ? formatMoney(estimate.minimum, currency)
-    : `${formatMoney(estimate.minimum, currency)}–${formatMoney(estimate.maximum, currency)}`;
+  // AI is assistive. It runs after the response is sent so a slow provider can
+  // never make a saved request look failed. No transactional email provider is
+  // configured: new leads surface in the dashboard; account emails go through
+  // Supabase Auth SMTP.
   const aiPhotos = validatedPhotos.slice(0, 4).map((photo) => photo.bytes);
   after(async () => {
     const aiLimit = PLAN_LIMITS[plan].aiPerMonth;
-    if (aiPhotos.length && aiLimit > 0) {
-      try {
-        const cap = Number.isFinite(aiLimit) ? aiLimit : Number(process.env.BUSINESS_AI_MONTHLY_HARD_CAP || 5000);
-        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true })
-          .eq('business_id', business.id).gte('ai_assessed_at', monthStartIso());
-        const aiRate = await persistentRateLimit(`public-ai:${business.id}`, 20, 60);
-        if ((count ?? 0) < cap && aiRate.allowed) {
-          const assessment = await assessVehicle(aiPhotos);
-          const { error } = await supabase.from('leads').update({ ai_assessment: assessment, ai_assessed_at: new Date().toISOString() })
-            .eq('id', lead.id).eq('business_id', business.id);
-          if (error) console.error('AI assessment save failed:', error.code, error.message);
-        }
-      } catch (error) {
-        console.error('AI assessment failed; lead kept without AI:', error instanceof Error ? error.message : 'unknown');
-      }
-    }
-
-    const results = await Promise.allSettled([
-      sendEmail({
-        to: input.email,
-        subject: `Request received — ${business.name}`,
-        html: emailShell('Request received', `<p>Hi ${escapeHtml(input.firstName)},</p><p>Your request for <strong>${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}</strong> was sent to ${escapeHtml(business.name)}.</p><p>Estimated range: <strong>${escapeHtml(range)}</strong>. Final pricing is confirmed by the business.</p>`),
-      }),
-      business.email ? sendEmail({
-        to: business.email,
-        subject: `New lead — ${input.firstName} ${input.lastName}`,
-        html: emailShell('New lead received', `<p><strong>${escapeHtml(input.firstName)} ${escapeHtml(input.lastName)}</strong> requested ${escapeHtml(service.name)} for ${escapeHtml(input.year)} ${escapeHtml(input.makeModel)}.</p><p>Estimated range: <strong>${escapeHtml(range)}</strong>.</p><p style="margin-top:24px"><a href="${escapeHtml(`${(process.env.NEXT_PUBLIC_APP_URL || 'https://detailflow-two.vercel.app').replace(/\/+$/, '')}/dashboard/leads/${lead.id}`)}" style="display:inline-block;background:#15231e;color:#fff;padding:12px 18px;text-decoration:none;border-radius:8px">Open lead in DetailFlow</a></p>`),
-      }) : Promise.resolve({ sent: false, skipped: true } as const),
-    ]);
-    for (const result of results) {
-      if (result.status === 'rejected') console.error('Lead email failed:', result.reason instanceof Error ? result.reason.message : 'unknown');
+    if (!aiPhotos.length || aiLimit <= 0) return;
+    try {
+      const cap = Number.isFinite(aiLimit) ? aiLimit : Number(process.env.BUSINESS_AI_MONTHLY_HARD_CAP || 5000);
+      const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true })
+        .eq('business_id', business.id).gte('ai_assessed_at', monthStartIso());
+      const aiRate = await persistentRateLimit(`public-ai:${business.id}`, 20, 60);
+      if ((count ?? 0) >= cap || !aiRate.allowed) return;
+      const assessment = await assessVehicle(aiPhotos);
+      const { error } = await supabase.from('leads').update({ ai_assessment: assessment, ai_assessed_at: new Date().toISOString() })
+        .eq('id', lead.id).eq('business_id', business.id);
+      if (error) console.error('AI assessment save failed:', error.code, error.message);
+    } catch (error) {
+      console.error('AI assessment failed; lead kept without AI:', error instanceof Error ? error.message : 'unknown');
     }
   });
 

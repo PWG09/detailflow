@@ -33,6 +33,7 @@ alter table public.leads add column if not exists search_text text not null defa
 create or replace function public.refresh_lead_search_text()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.search_text :=
@@ -40,7 +41,7 @@ begin
       trim(
         concat_ws(
           ' ',
-          coalesce(new.status, ''),
+          coalesce(new.status::text, ''),
           coalesce(to_jsonb(new.vehicle)::text, '')
         )
       )
@@ -55,14 +56,14 @@ before insert or update of status, vehicle on public.leads
 for each row execute function public.refresh_lead_search_text();
 
 update public.leads
-set search_text = lower(trim(concat_ws(' ', coalesce(status, ''), coalesce(to_jsonb(vehicle)::text, ''))))
+set search_text = lower(trim(concat_ws(' ', coalesce(status::text, ''), coalesce(to_jsonb(vehicle)::text, ''))))
 where search_text = '';
 
 create index if not exists leads_search_text_trgm_idx
   on public.leads using gin (search_text gin_trgm_ops);
 
-create index if not exists leads_status_trgm_idx
-  on public.leads using gin (lower(status) gin_trgm_ops);
+-- Status is already part of search_text; lead_status is an enum, so it cannot
+-- be indexed with lower()/trigram expressions directly.
 
 -- Workspace counters avoid repeated exact COUNT scans on every dashboard load.
 create table if not exists public.business_metrics (
@@ -77,15 +78,21 @@ create table if not exists public.business_metrics (
 create or replace function public.ensure_business_metrics(p_business_id uuid)
 returns void
 language sql
+security definer
+set search_path = public
 as $$
   insert into public.business_metrics (business_id)
   values (p_business_id)
   on conflict (business_id) do nothing;
 $$;
 
+-- Runs as the function owner so dashboard users (SELECT-only on
+-- business_metrics) can still create leads, quotes and customers.
 create or replace function public.sync_business_metrics_leads()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   if tg_op = 'INSERT' then
@@ -97,7 +104,6 @@ begin
     where business_id = new.business_id;
     return new;
   elsif tg_op = 'DELETE' then
-    perform public.ensure_business_metrics(old.business_id);
     update public.business_metrics
       set leads_count = greatest(0, leads_count - 1),
           won_leads_count = greatest(0, won_leads_count - case when old.status = 'won' then 1 else 0 end),
@@ -107,7 +113,6 @@ begin
   end if;
 
   if new.business_id is distinct from old.business_id then
-    perform public.ensure_business_metrics(old.business_id);
     perform public.ensure_business_metrics(new.business_id);
     update public.business_metrics
       set leads_count = greatest(0, leads_count - 1),
@@ -132,9 +137,13 @@ begin
 end;
 $$;
 
+-- Runs as the function owner so dashboard users (SELECT-only on
+-- business_metrics) can still create leads, quotes and customers.
 create or replace function public.sync_business_metrics_quotes()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   if tg_op = 'INSERT' then
@@ -143,14 +152,12 @@ begin
       where business_id = new.business_id;
     return new;
   elsif tg_op = 'DELETE' then
-    perform public.ensure_business_metrics(old.business_id);
     update public.business_metrics set quotes_count = greatest(0, quotes_count - 1), updated_at = now()
       where business_id = old.business_id;
     return old;
   end if;
 
   if new.business_id is distinct from old.business_id then
-    perform public.ensure_business_metrics(old.business_id);
     perform public.ensure_business_metrics(new.business_id);
     update public.business_metrics set quotes_count = greatest(0, quotes_count - 1), updated_at = now()
       where business_id = old.business_id;
@@ -161,9 +168,13 @@ begin
 end;
 $$;
 
+-- Runs as the function owner so dashboard users (SELECT-only on
+-- business_metrics) can still create leads, quotes and customers.
 create or replace function public.sync_business_metrics_customers()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   if tg_op = 'INSERT' then
@@ -172,14 +183,12 @@ begin
       where business_id = new.business_id;
     return new;
   elsif tg_op = 'DELETE' then
-    perform public.ensure_business_metrics(old.business_id);
     update public.business_metrics set customers_count = greatest(0, customers_count - 1), updated_at = now()
       where business_id = old.business_id;
     return old;
   end if;
 
   if new.business_id is distinct from old.business_id then
-    perform public.ensure_business_metrics(old.business_id);
     perform public.ensure_business_metrics(new.business_id);
     update public.business_metrics set customers_count = greatest(0, customers_count - 1), updated_at = now()
       where business_id = old.business_id;
@@ -234,6 +243,11 @@ on conflict (business_id) do update set
   won_leads_count = excluded.won_leads_count,
   updated_at = now();
 
+revoke all on function public.ensure_business_metrics(uuid) from public, anon, authenticated;
+revoke all on function public.sync_business_metrics_leads() from public, anon, authenticated;
+revoke all on function public.sync_business_metrics_quotes() from public, anon, authenticated;
+revoke all on function public.sync_business_metrics_customers() from public, anon, authenticated;
+
 alter table public.business_metrics enable row level security;
 revoke all on public.business_metrics from anon;
 grant select on public.business_metrics to authenticated;
@@ -266,7 +280,7 @@ set search_path = public, auth, pg_temp
 as $$
   select
     bm.user_id,
-    bm.role,
+    bm.role::text,
     bm.created_at,
     u.email::text,
     nullif(trim(coalesce(u.raw_user_meta_data->>'full_name', '')), '') as name

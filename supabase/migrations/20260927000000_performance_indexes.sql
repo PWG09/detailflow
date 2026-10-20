@@ -27,21 +27,10 @@ create index if not exists quotes_business_lead_idx
 create index if not exists quotes_business_customer_idx
   on public.quotes (business_id, customer_id);
 
--- Search is performed with a contains/ILIKE query. A trigram index avoids
--- scanning every lead as the workspace grows.
-alter table public.leads
-  add column if not exists search_text text
-  generated always as (
-    lower(
-      coalesce(status::text, '') || ' ' ||
-      coalesce(vehicle::text, '') || ' ' ||
-      coalesce(condition::text, '') || ' ' ||
-      coalesce(notes, '')
-    )
-  ) stored;
-
-create index if not exists leads_search_text_trgm_idx
-  on public.leads using gin (search_text gin_trgm_ops);
+-- Lead search (leads.search_text + its trigram index) is defined in
+-- 20260927020000_high_scale_search_and_metrics.sql. It is maintained by a
+-- trigger because enum-to-text casts are not immutable and cannot be used in
+-- a generated column.
 
 -- Helpful for the monthly lead-cap count used during public submissions.
 create index if not exists leads_business_created_status_idx

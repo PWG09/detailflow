@@ -10,7 +10,7 @@ type Billing={plan:string;trial_status?:string|null;trial_ends_at?:string|null;r
 
 const defaultPlans=[
   {id:'free',name:'Free',fallbackPrice:0,copy:'For getting started',features:['5 quote requests / month','Core quote workflow','Secure public quote links']},
-  {id:'pro',name:'Pro',fallbackPrice:25,copy:'For growing detailers',features:['100 quote requests / month','AI vehicle assessment','Stripe customer payments','5 team members']},
+  {id:'pro',name:'Pro',fallbackPrice:29,copy:'For growing detailers',features:['100 quote requests / month','AI vehicle assessment','Stripe customer payments','5 team members']},
   {id:'business',name:'Business',fallbackPrice:79,copy:'For established teams',features:['Unlimited quote requests','Higher AI allowance','Stripe customer payments','Unlimited team members']},
 ];
 

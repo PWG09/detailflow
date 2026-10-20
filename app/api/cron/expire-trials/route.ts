@@ -30,14 +30,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Trial expiry job failed.' }, { status: 500 });
   }
 
-  // Housekeeping. Failures are logged but do not fail the job.
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [limits, intents] = await Promise.all([
-    admin.from('security_rate_limits').delete().lt('reset_at', dayAgo),
-    admin.from('auth_verification_intents').delete().lt('expires_at', dayAgo),
-  ]);
-  if (limits.error) console.error('Rate limit cleanup failed:', limits.error.message);
-  if (intents.error) console.error('Verification intent cleanup failed:', intents.error.message);
+  // Housekeeping is best-effort: a failure here must not hide the trial result.
+  const { data: cleanup, error: cleanupError } = await admin.rpc('cleanup_security_state');
+  if (cleanupError) console.error('Security state cleanup failed:', cleanupError.message);
 
-  return NextResponse.json({ expired: data?.length ?? 0 });
+  return NextResponse.json({ expired: data?.length ?? 0, cleanup: Array.isArray(cleanup) ? cleanup[0] ?? null : null });
 }
