@@ -105,7 +105,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
   if (photoPaths.length) {
     try {
       const { data: signed } = await createSupabaseAdminClient().storage.from('vehicle-photos').createSignedUrls(photoPaths, 600);
-      photos = (signed ?? []).filter((item) => item.signedUrl && !item.error).map((item) => ({ path: item.path ?? '', url: item.signedUrl }));
+      photos = (signed ?? []).flatMap((item) => (item.signedUrl && !item.error ? [{ path: item.path ?? item.signedUrl, url: item.signedUrl }] : []));
     } catch (photoError) {
       console.error('Lead photo signing failed:', photoError instanceof Error ? photoError.message : 'unknown');
     }
