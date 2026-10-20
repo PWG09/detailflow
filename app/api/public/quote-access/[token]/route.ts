@@ -1,11 +1,134 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getClientIp, persistentRateLimit } from '@/lib/security';
-import { getAppUrl, getStripe } from '@/lib/stripe';
-import Stripe from 'stripe';
-export const runtime='nodejs';
-function tokenHash(token:string){return createHash('sha256').update(token).digest('hex');}
-async function load(token:string){const supabase=createSupabaseAdminClient();const {data}=await supabase.from('quote_public_access').select('id,quote_id,expires_at,revoked_at,quotes(id,quote_number,total,status,payment_status,stripe_checkout_session_id,notes,expires_at,customers(first_name,last_name,email),businesses(id,name,slug,email,currency,stripe_connected_account_id,stripe_charges_enabled,stripe_payouts_enabled,platform_fee_percent))').eq('token_hash',tokenHash(token)).maybeSingle();if(!data||data.revoked_at||data.expires_at&&new Date(data.expires_at)<new Date())return null;return data;}
-export async function GET(request:Request,{params}:{params:Promise<{token:string}>}){const {token}=await params;const rate=await persistentRateLimit(`public-quote-access:${getClientIp(request)}:${token.slice(0,12)}`,30,60*60);if(!rate.allowed)return NextResponse.json({error:'Too many requests.'},{status:429,headers:{'Retry-After':String(Math.ceil(rate.retryAfter/1000))}});const data=await load(token);if(!data)return NextResponse.json({error:'This quote link is invalid, expired, or revoked.'},{status:404});const q=Array.isArray(data.quotes)?data.quotes[0]:data.quotes;const business=Array.isArray(q?.businesses)?q.businesses[0]:q?.businesses;const customer=Array.isArray(q?.customers)?q.customers[0]:q?.customers;return NextResponse.json({quote:{id:q?.id,quoteNumber:q?.quote_number,total:q?.total,status:q?.status,paymentStatus:q?.payment_status,notes:q?.notes,expiresAt:q?.expires_at},business:{name:business?.name,email:business?.email,currency:business?.currency},customer:{firstName:customer?.first_name,lastName:customer?.last_name}});}
-export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){const {token}=await params;const rate=await persistentRateLimit(`public-quote-payment:${getClientIp(request)}:${token.slice(0,12)}`,10,60*60);if(!rate.allowed)return NextResponse.json({error:'Too many payment attempts.'},{status:429,headers:{'Retry-After':String(Math.ceil(rate.retryAfter/1000))}});const data=await load(token);if(!data)return NextResponse.json({error:'This quote link is invalid, expired, or revoked.'},{status:404});const q=Array.isArray(data.quotes)?data.quotes[0]:data.quotes;const business=Array.isArray(q?.businesses)?q.businesses[0]:q?.businesses;const customer=Array.isArray(q?.customers)?q.customers[0]:q?.customers;if(!q||!business)return NextResponse.json({error:'Quote unavailable.'},{status:404});if(q.status!=='accepted')return NextResponse.json({error:'The quote must be accepted before payment.'},{status:400});if(q.payment_status==='paid')return NextResponse.json({error:'This quote has already been paid.'},{status:409});if(q.stripe_checkout_session_id){try{const existing=(await getStripe().checkout.sessions.retrieve(q.stripe_checkout_session_id)) as unknown as Stripe.Checkout.Session;if(existing.url)return NextResponse.json({url:existing.url});}catch{}}if(!business.stripe_connected_account_id||!business.stripe_charges_enabled||!business.stripe_payouts_enabled)return NextResponse.json({error:'The business has not finished setting up Stripe payments.'},{status:409});const amount=Math.round(Number(q.total)*100);const currency=(business.currency||'USD').toLowerCase();const feePercent=Math.min(100,Math.max(0,Number(business.platform_fee_percent??process.env.STRIPE_APPLICATION_FEE_PERCENT??2.5)));const fee=Math.min(amount,Math.round(amount*feePercent/100));if(!Number.isInteger(amount)||amount<=0)return NextResponse.json({error:'Invalid quote amount.'},{status:400});try{const params:Stripe.Checkout.SessionCreateParams={mode:'payment',customer_email:customer?.email||undefined,line_items:[{price_data:{currency,product_data:{name:`Quote ${q.quote_number}`},unit_amount:amount},quantity:1}],metadata:{quoteId:q.id,businessId:business.id,connectedAccountId:business.stripe_connected_account_id,platformFeeAmount:String(fee)},payment_intent_data:{application_fee_amount:fee,transfer_data:{destination:business.stripe_connected_account_id},metadata:{quoteId:q.id,businessId:business.id}},success_url:`${getAppUrl()}/quote/payment/success?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${getAppUrl()}/quote/payment/cancelled`};const session=(await getStripe().checkout.sessions.create(params,{idempotencyKey:`public-quote-payment:${q.id}`})) as unknown as Stripe.Checkout.Session;const {error:updateError}=await createSupabaseAdminClient().from('quotes').update({payment_status:'pending',stripe_checkout_session_id:session.id,updated_at:new Date().toISOString()}).eq('id',q.id);if(updateError){console.error('Public quote payment state update failed:',updateError.message);return NextResponse.json({error:'Payment was created, but the quote status could not be updated. Please contact the business before trying again.'},{status:500});}return NextResponse.json({url:session.url});}catch(error){console.error('Public Stripe payment failed:',error instanceof Error?error.message:'unknown');return NextResponse.json({error:'Unable to start secure payment.'},{status:502});}}
+import { createQuoteCheckout } from '@/lib/quote-checkout';
+import { canTransitionQuote } from '@/lib/quote-math';
+
+export const runtime = 'nodejs';
+
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url
+const actionSchema = z.object({ action: z.enum(['accept', 'decline', 'pay']) });
+
+type QuoteRow = {
+  id: string; business_id: string; quote_number: string; subtotal: number | string; tax: number | string; total: number | string;
+  status: string; payment_status: string | null; stripe_checkout_session_id: string | null; notes: string | null; expires_at: string | null;
+  customers: { first_name: string | null; last_name: string | null; email: string | null } | null;
+  businesses: { id: string; name: string; email: string | null; phone: string | null; currency: string | null; stripe_connected_account_id: string | null; stripe_charges_enabled: boolean | null; stripe_payouts_enabled: boolean | null; platform_fee_percent: number | string | null } | null;
+};
+
+function one<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+function tokenHash(token: string) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+type Loaded = { admin: ReturnType<typeof createSupabaseAdminClient>; quote: QuoteRow | null; failed: boolean };
+
+async function load(token: string): Promise<Loaded> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from('quote_public_access')
+    .select('id,quote_id,expires_at,revoked_at,quotes(id,business_id,quote_number,subtotal,tax,total,status,payment_status,stripe_checkout_session_id,notes,expires_at,customers(first_name,last_name,email),businesses(id,name,email,phone,currency,stripe_connected_account_id,stripe_charges_enabled,stripe_payouts_enabled,platform_fee_percent))')
+    .eq('token_hash', tokenHash(token))
+    .maybeSingle();
+  if (error) {
+    console.error('Public quote lookup failed:', error.code, error.message);
+    return { admin, quote: null, failed: true }
+  }
+  if (!data || data.revoked_at || (data.expires_at && new Date(data.expires_at).getTime() <= Date.now())) return { admin, quote: null, failed: false }
+  const quote = one(data.quotes as unknown as QuoteRow | QuoteRow[]);
+  if (!quote) return { admin, quote: null, failed: false }
+  return { admin, quote: { ...quote, customers: one(quote.customers), businesses: one(quote.businesses) }, failed: false }
+}
+
+function quoteExpired(quote: QuoteRow) {
+  return Boolean(quote.expires_at && new Date(quote.expires_at).getTime() <= Date.now());
+}
+
+function present(quote: QuoteRow) {
+  return {
+    quote: {
+      quoteNumber: quote.quote_number,
+      subtotal: Number(quote.subtotal),
+      tax: Number(quote.tax),
+      total: Number(quote.total),
+      status: quoteExpired(quote) && !['accepted', 'declined'].includes(quote.status) ? 'expired' : quote.status,
+      paymentStatus: quote.payment_status ?? 'unpaid',
+      notes: quote.notes,
+      expiresAt: quote.expires_at,
+    },
+    business: { name: quote.businesses?.name ?? 'Business', email: quote.businesses?.email ?? null, phone: quote.businesses?.phone ?? null, currency: quote.businesses?.currency ?? 'USD' },
+    customer: { firstName: quote.customers?.first_name ?? '', lastName: quote.customers?.last_name ?? '' },
+    canPayOnline: Boolean(quote.businesses?.stripe_connected_account_id && quote.businesses.stripe_charges_enabled && quote.businesses.stripe_payouts_enabled),
+  };
+}
+
+const unavailable = () => NextResponse.json({ error: 'This quote link is invalid, expired, or revoked.' }, { status: 404 });
+
+export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  if (!TOKEN_PATTERN.test(token)) return unavailable();
+  const rate = await persistentRateLimit(`public-quote-access:${getClientIp(request)}`, 60, 60 * 60);
+  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': String(Math.ceil(rate.retryAfter / 1000)) } });
+
+  const { admin, quote, failed } = await load(token);
+  if (failed) return NextResponse.json({ error: 'Unable to load this quote right now.' }, { status: 500 });
+  if (!quote) return unavailable();
+
+  if (quote.status === 'sent' && !quoteExpired(quote)) {
+    const { error } = await admin.from('quotes').update({ status: 'viewed', updated_at: new Date().toISOString() }).eq('id', quote.id).eq('status', 'sent');
+    if (error) console.error('Quote viewed update failed:', error.code, error.message);
+    else quote.status = 'viewed';
+  }
+
+  return NextResponse.json(present(quote), { headers: { 'Cache-Control': 'private, no-store' } });
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  if (!TOKEN_PATTERN.test(token)) return unavailable();
+  const rate = await persistentRateLimit(`public-quote-action:${getClientIp(request)}`, 20, 60 * 60);
+  if (!rate.allowed) return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429, headers: { 'Retry-After': String(Math.ceil(rate.retryAfter / 1000)) } });
+
+  // An empty body keeps the original "pay" behaviour for older clients.
+  const body = await request.json().catch(() => ({}));
+  const parsed = actionSchema.safeParse(body && typeof body === 'object' && 'action' in body ? body : { action: 'pay' });
+  if (!parsed.success) return NextResponse.json({ error: 'Unsupported action.' }, { status: 400 });
+
+  const { admin, quote, failed } = await load(token);
+  if (failed) return NextResponse.json({ error: 'Unable to load this quote right now.' }, { status: 500 });
+  if (!quote || !quote.businesses) return unavailable();
+
+  if (parsed.data.action === 'accept' || parsed.data.action === 'decline') {
+    if (quoteExpired(quote)) return NextResponse.json({ error: 'This quote has expired. Contact the business for an updated quote.' }, { status: 409 });
+    if (!['sent', 'viewed'].includes(quote.status)) {
+      return NextResponse.json({ error: quote.status === 'accepted' ? 'This quote is already accepted.' : 'This quote can no longer be changed.' }, { status: 409 });
+    }
+    const next = parsed.data.action === 'accept' ? 'accepted' : 'declined';
+    const transition = canTransitionQuote(quote.status, next, quote.payment_status);
+    if (!transition.ok) return NextResponse.json({ error: transition.reason }, { status: 409 });
+
+    const { data, error } = await admin.from('quotes')
+      .update({ status: next, updated_at: new Date().toISOString() })
+      .eq('id', quote.id).eq('status', quote.status)
+      .select('id').maybeSingle();
+    if (error) {
+      console.error('Public quote status update failed:', error.code, error.message);
+      return NextResponse.json({ error: 'Unable to update this quote right now.' }, { status: 500 });
+    }
+    if (!data) return NextResponse.json({ error: 'This quote was just updated. Refresh the page.' }, { status: 409 });
+    const { error: auditError } = await admin.from('audit_logs').insert({ business_id: quote.business_id, actor_id: null, action: `quote.customer_${next}`, entity_type: 'quote', entity_id: quote.id, metadata: { via: 'public_link' } });
+    if (auditError) console.error('Audit log write failed:', auditError.code, auditError.message);
+    quote.status = next;
+    return NextResponse.json(present(quote));
+  }
+
+  if (quoteExpired(quote)) return NextResponse.json({ error: 'This quote has expired. Contact the business for an updated quote.' }, { status: 409 });
+  const result = await createQuoteCheckout(quote, quote.businesses, quote.customers?.email ?? null);
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ url: result.url });
+}

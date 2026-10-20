@@ -1,34 +1,110 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { decodeCursor, encodeCursor, pageSize } from '@/lib/keyset-pagination';
+import { resolveWorkspace } from '@/lib/workspace';
+import { cursorFilter, decodeCursor, encodeCursor, pageSize } from '@/lib/keyset-pagination';
+import { calculateQuoteTotals, validateQuoteAmount } from '@/lib/quote-math';
+import { writeAudit } from '@/lib/audit';
 
-const quoteSchema = z.object({ leadId: z.string().uuid(), amount: z.coerce.number().finite().min(0), notes: z.string().max(2000).optional().default(''), expiresAt: z.string().datetime().optional() });
+const quoteSchema = z.object({
+  leadId: z.string().uuid(),
+  amount: z.coerce.number().finite(),
+  notes: z.string().trim().max(2000).optional().default(''),
+  expiresAt: z.string().datetime({ offset: true }).optional(),
+});
 
-type QuoteListRow = { id:string; quote_number:string; status:string; payment_status?:string|null; total:number; expires_at:string|null; created_at:string; lead_id:string; customers?:{first_name:string|null;last_name:string|null}|null; leads?:{vehicle:unknown}|null };
+const LIST_SELECT = 'id,quote_number,status,payment_status,subtotal,tax,total,expires_at,created_at,lead_id,customer_id,customers(first_name,last_name),leads(vehicle)';
 
-async function context(){ const supabase=await createSupabaseServerClient(); const {data:userData}=await supabase.auth.getUser(); if(!userData.user)return {supabase,businessId:null}; const {data:membership}=await supabase.from('business_members').select('business_id').eq('user_id',userData.user.id).limit(1).maybeSingle(); return {supabase,businessId:membership?.business_id??null}; }
+export async function GET(request: Request) {
+  const resolved = await resolveWorkspace();
+  if (!resolved.ok) return resolved.response;
+  const { supabase, membership } = resolved.workspace;
 
-export async function GET(request:Request){
- const {supabase,businessId}=await context(); if(!businessId)return NextResponse.json({error:'Workspace not found.'},{status:404});
- const url=new URL(request.url); const limit=pageSize(request); const cursor=decodeCursor(url.searchParams.get('cursor'));
- const selectWithPayments='id,quote_number,status,payment_status,total,expires_at,created_at,lead_id,customers(first_name,last_name),leads(vehicle)';
- const selectBase='id,quote_number,status,total,expires_at,created_at,lead_id,customers(first_name,last_name),leads(vehicle)';
- async function run(select:string){ let q=supabase.from('quotes').select(select).eq('business_id',businessId); if(cursor)q=q.or('created_at.lt.'+cursor.value+',and(created_at.eq.'+cursor.value+',id.lt.'+cursor.id+')'); return q.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(limit+1); }
- const primary=await run(selectWithPayments); let rows:QuoteListRow[]=[];
- if(!primary.error&&Array.isArray(primary.data))rows=primary.data as unknown as QuoteListRow[]; else { const fallback=await run(selectBase); if(fallback.error)return NextResponse.json({error:'Unable to load quotes.'},{status:500}); rows=Array.isArray(fallback.data)?(fallback.data as unknown as QuoteListRow[]).map(quote=>Object.assign({},quote,{payment_status:'unpaid'})):[]; }
- const hasMore=rows.length>limit; const page=hasMore?rows.slice(0,limit):rows; const last=page[page.length-1]; const nextCursor=hasMore&&last?encodeCursor({value:last.created_at,id:last.id}):null;
- return NextResponse.json({data:page,nextCursor,hasMore},{headers:{'Cache-Control':'private, no-store'}});
+  const url = new URL(request.url);
+  const limit = pageSize(request);
+  const cursor = decodeCursor(url.searchParams.get('cursor'));
+
+  let query = supabase.from('quotes').select(LIST_SELECT).eq('business_id', membership.business_id);
+  if (cursor) query = query.or(cursorFilter('created_at', cursor));
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (error) {
+    console.error('Quote list query failed:', error.code, error.message);
+    return NextResponse.json({ error: 'Unable to load quotes.' }, { status: 500 });
+  }
+
+  const rows = (data ?? []) as unknown as Array<{ id: string; created_at: string }>;
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? encodeCursor({ value: last.created_at, id: last.id }) : null;
+  return NextResponse.json({ data: page, nextCursor, hasMore }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
-export async function POST(request:Request){
- const {supabase,businessId}=await context(); if(!businessId)return NextResponse.json({error:'Workspace not found.'},{status:404});
- const parsed=quoteSchema.safeParse(await request.json().catch(()=>null)); if(!parsed.success)return NextResponse.json({error:'Choose a valid lead and quote price.'},{status:400});
- const {data:lead}=await supabase.from('leads').select('id,customer_id,service_id,estimate').eq('id',parsed.data.leadId).eq('business_id',businessId).maybeSingle(); if(!lead)return NextResponse.json({error:'Lead not found.'},{status:404});
- const estimate=(lead.estimate??{}) as {minimum?:number;maximum?:number}; const minimum=typeof estimate.minimum==='number'?estimate.minimum:null; const maximum=typeof estimate.maximum==='number'?estimate.maximum:null; const amount=parsed.data.amount;
- if(minimum!=null&&amount<minimum)return NextResponse.json({error:'Quote price must be at least $'+minimum+'.'},{status:400});
- if(maximum!=null&&amount>maximum)return NextResponse.json({error:'Quote price cannot exceed $'+maximum+'.'},{status:400});
- const quoteNumber='Q-'+new Date().getFullYear()+'-'+crypto.randomUUID().slice(0,8).toUpperCase();
- const {data,error}=await supabase.from('quotes').insert({business_id:businessId,lead_id:lead.id,customer_id:lead.customer_id,quote_number:quoteNumber,services:[{service_id:lead.service_id,amount}],subtotal:amount,total:amount,status:'draft',expires_at:parsed.data.expiresAt,notes:parsed.data.notes}).select('id,quote_number,status,payment_status,total,expires_at,created_at,lead_id,customer_id').single();
- if(error)return NextResponse.json({error:'Unable to create quote.'},{status:500}); await supabase.from('leads').update({status:'quoted'}).eq('id',lead.id).eq('business_id',businessId); return NextResponse.json(data,{status:201});
+export async function POST(request: Request) {
+  const resolved = await resolveWorkspace();
+  if (!resolved.ok) return resolved.response;
+  const { supabase, user, membership } = resolved.workspace;
+  const businessId = membership.business_id;
+
+  const parsed = quoteSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Choose a valid lead and quote price.' }, { status: 400 });
+
+  if (parsed.data.expiresAt && new Date(parsed.data.expiresAt).getTime() <= Date.now()) {
+    return NextResponse.json({ error: 'The expiry date must be in the future.' }, { status: 400 });
+  }
+
+  const [{ data: lead, error: leadError }, { data: business, error: businessError }] = await Promise.all([
+    supabase.from('leads').select('id,customer_id,service_id,estimate,status').eq('id', parsed.data.leadId).eq('business_id', businessId).maybeSingle(),
+    supabase.from('businesses').select('id,tax_rate,currency').eq('id', businessId).single(),
+  ]);
+  if (leadError || businessError || !business) {
+    console.error('Quote creation lookup failed:', leadError?.message ?? businessError?.message);
+    return NextResponse.json({ error: 'Unable to create quote.' }, { status: 500 });
+  }
+  if (!lead) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
+  if (['lost', 'archived'].includes(lead.status)) return NextResponse.json({ error: 'Reopen this lead before quoting it.' }, { status: 409 });
+
+  const amountCheck = validateQuoteAmount(parsed.data.amount, (lead.estimate ?? {}) as { minimum?: unknown; maximum?: unknown });
+  if (!amountCheck.ok) return NextResponse.json({ error: amountCheck.reason }, { status: 400 });
+
+  let totals: ReturnType<typeof calculateQuoteTotals>;
+  try {
+    totals = calculateQuoteTotals(parsed.data.amount, Number(business.tax_rate ?? 0));
+  } catch {
+    return NextResponse.json({ error: 'The business tax configuration is invalid.' }, { status: 400 });
+  }
+
+  const quoteNumber = `Q-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  const { data, error } = await supabase.from('quotes').insert({
+    business_id: businessId,
+    lead_id: lead.id,
+    customer_id: lead.customer_id,
+    quote_number: quoteNumber,
+    services: [{ service_id: lead.service_id, amount: totals.subtotal }],
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    total: totals.total,
+    status: 'draft',
+    expires_at: parsed.data.expiresAt ?? null,
+    notes: parsed.data.notes,
+  }).select('id,quote_number,status,payment_status,subtotal,tax,total,expires_at,created_at,lead_id,customer_id').single();
+  if (error) {
+    console.error('Quote insert failed:', error.code, error.message);
+    return NextResponse.json({ error: 'Unable to create quote.' }, { status: 500 });
+  }
+
+  if (['new', 'contacted'].includes(lead.status)) {
+    const now = new Date().toISOString();
+    const { error: leadUpdateError } = await supabase
+      .from('leads')
+      .update({ status: 'quoted', quoted_at: now, updated_at: now })
+      .eq('id', lead.id)
+      .eq('business_id', businessId);
+    if (leadUpdateError) console.error('Lead status update after quote failed:', leadUpdateError.code, leadUpdateError.message);
+  }
+
+  await writeAudit(businessId, user.id, 'quote.created', 'quote', data.id, { total: totals.total });
+  return NextResponse.json(data, { status: 201 });
 }
