@@ -165,6 +165,7 @@ export default function LoginPage() {
         .from('business_members')
         .select('business_id, user_id')
         .eq('user_id', userId ?? '')
+        .limit(1)
         .maybeSingle();
 
       if (businessError) {
