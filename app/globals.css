@@ -162,3 +162,11 @@ button,a,input,textarea,select{touch-action:manipulation}
   .form-actions{gap:8px}
   .form-actions .button-primary,.form-actions .back-button{flex:1;justify-content:center}
 }
+
+/* Cookie notice: essential-only notice, never over task-flow action bars. On
+   small screens it sits at the top so it cannot cover the mobile sticky CTA. */
+.cookie-notice{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto;z-index:50;background:#111827;color:#fff;padding:14px 16px;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.cookie-notice-text{font-size:13px;line-height:1.5;flex:1 1 260px}
+.cookie-notice-text a{color:#fff;text-decoration:underline}
+.cookie-notice .button-primary{min-height:40px}
+@media (max-width:700px){.cookie-notice{bottom:auto;top:calc(10px + env(safe-area-inset-top))}}

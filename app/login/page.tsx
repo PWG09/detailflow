@@ -74,6 +74,9 @@ export default function LoginPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
+    // Runs once on mount to resume a verification link; startPolling is
+    // intentionally not a dependency so polling is not restarted on re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -165,6 +168,7 @@ export default function LoginPage() {
         .from('business_members')
         .select('business_id, user_id')
         .eq('user_id', userId ?? '')
+        .limit(1)
         .maybeSingle();
 
       if (businessError) {

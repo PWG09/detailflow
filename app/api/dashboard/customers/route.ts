@@ -1,24 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { decodeCursor, encodeCursor, escapeLike, pageSize } from '@/lib/keyset-pagination';
+import { resolveWorkspace } from '@/lib/workspace';
+import { cursorFilter, decodeCursor, encodeCursor, escapeLike, pageSize, sanitizeSearchTerm } from '@/lib/keyset-pagination';
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
-
-  const { data: membership } = await supabase
-    .from('business_members')
-    .select('business_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-  if (!membership) return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
+  const resolved = await resolveWorkspace();
+  if (!resolved.ok) return resolved.response;
+  const { supabase, membership } = resolved.workspace;
 
   const url = new URL(request.url);
   const limit = pageSize(request);
   const cursor = decodeCursor(url.searchParams.get('cursor'));
-  const query = url.searchParams.get('q')?.trim().slice(0, 80) || '';
+  const query = sanitizeSearchTerm(url.searchParams.get('q'));
 
   let requestQuery = supabase
     .from('customers')
@@ -28,21 +20,20 @@ export async function GET(request: Request) {
   if (query) {
     const pattern = `%${escapeLike(query.toLowerCase())}%`;
     requestQuery = requestQuery.or(
-      `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`
+      `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`,
     );
   }
-  if (cursor) {
-    requestQuery = requestQuery.or(
-      `updated_at.lt.${cursor.value},and(updated_at.eq.${cursor.value},id.lt.${cursor.id})`
-    );
-  }
+  if (cursor) requestQuery = requestQuery.or(cursorFilter('updated_at', cursor));
 
   const { data, error } = await requestQuery
     .order('updated_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit + 1);
 
-  if (error) return NextResponse.json({ error: 'Unable to load customers.' }, { status: 500 });
+  if (error) {
+    console.error('Customer list query failed:', error.code, error.message);
+    return NextResponse.json({ error: 'Unable to load customers.' }, { status: 500 });
+  }
 
   const rows = data ?? [];
   const hasMore = rows.length > limit;
@@ -52,6 +43,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json(
     { data: page, nextCursor, hasMore },
-    { headers: { 'Cache-Control': 'private, no-store' } }
+    { headers: { 'Cache-Control': 'private, no-store' } },
   );
 }

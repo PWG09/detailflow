@@ -29,10 +29,13 @@ export default function AiAssessmentButton({ leadId, hasAssessment }: { leadId: 
     }
   }
 
+  // A stored assessment is reused by the server, so offering a re-run would mislead.
+  if (hasAssessment) return null;
+
   return (
     <div style={{ marginTop: 16 }}>
       <button className="button-secondary" type="button" onClick={() => void runAssessment()} disabled={busy}>
-        <Sparkles size={15} /> {busy ? 'Analyzing...' : hasAssessment ? 'Run AI again' : 'Run AI assessment'}
+        <Sparkles size={15} /> {busy ? 'Analyzing photos…' : 'Run AI photo assessment'}
       </button>
       {message ? <p className="auth-message" role="alert">{message}</p> : null}
     </div>

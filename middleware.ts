@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { createRequestId, logEvent, logRequest } from '@/lib/logger';
+import { pickPrimaryMembership, type MembershipRow } from '@/lib/membership-selection';
 
 function sameOrigin(request: NextRequest) {
   const origin = request.headers.get('origin');
@@ -65,9 +66,10 @@ export async function middleware(request: NextRequest) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const billingProtected = (pathname.startsWith('/dashboard') && pathname !== '/dashboard/settings') || (pathname.startsWith('/api/dashboard/') && !pathname.startsWith('/api/dashboard/billing') && pathname !== '/api/dashboard/business');
+  const billingProtected = (pathname.startsWith('/dashboard') && pathname !== '/dashboard/settings') || (pathname.startsWith('/api/dashboard/') && !pathname.startsWith('/api/dashboard/billing') && pathname !== '/api/dashboard/business' && pathname !== '/api/dashboard/account/delete' && pathname !== '/api/dashboard/export');
   if (user && billingProtected) {
-    const { data: membership } = await supabase.from('business_members').select('business_id').eq('user_id', user.id).limit(1).maybeSingle();
+    const { data: rows } = await supabase.from('business_members').select('business_id,role,created_at').eq('user_id', user.id).order('created_at', { ascending: true }).limit(20);
+    const membership = pickPrimaryMembership((rows ?? []) as MembershipRow[]);
     if (membership) {
       const { data: business } = await supabase.from('businesses').select('plan,trial_status,trial_ends_at').eq('id', membership.business_id).maybeSingle();
       const expired = business?.trial_status === 'blocked' ||

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight, CalendarDays, Mail, Phone, Repeat2, UserRound, ClipboardList, CarFront } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { getDashboardContext } from '@/lib/dashboard-context';
+import { formatMoney } from '@/lib/quote-math';
+import { isUuid } from '@/lib/keyset-pagination';
 
 type Customer = {
   id: string;
@@ -45,7 +47,7 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
   const { id } = await props.params;
   const { supabase, business } = await getDashboardContext();
 
-  if (!business) notFound();
+  if (!business || !isUuid(id)) notFound();
 
   const { data: customer, error: customerError } = await supabase
     .from('customers')
@@ -64,8 +66,19 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
     .order('created_at', { ascending: false });
 
   const customerLeads: Lead[] = leadsError ? [] : (leads ?? []) as Lead[];
-  const repeatOrders = Math.max(0, customerLeads.length - 1);
   const latestLead = customerLeads[0];
+
+  // Repeat orders count completed work only: quotes that were actually paid.
+  // Lost, archived and unpaid requests are not orders.
+  const { data: paidQuotes } = await supabase
+    .from('quotes')
+    .select('id,total')
+    .eq('business_id', business.id)
+    .eq('customer_id', customer.id)
+    .eq('payment_status', 'paid');
+  const paidOrders = paidQuotes?.length ?? 0;
+  const repeatOrders = Math.max(0, paidOrders - 1);
+  const paidTotal = (paidQuotes ?? []).reduce((sum, quote) => sum + Math.round(Number(quote.total) * 100), 0) / 100;
 
   return (
     <section className="dashboard-main customer-profile-page">
@@ -87,7 +100,7 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
             <Mail size={15} /> Email customer
           </a>
           {customer.phone && (
-            <a className="button-primary" href={`tel:${customer.phone}`}>
+            <a className="button-primary" href={`tel:${customer.phone.replace(/[^+\d]/g, '')}`}>
               <Phone size={15} /> Call
             </a>
           )}
@@ -101,9 +114,9 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
           <small>Lead submissions from this customer</small>
         </div>
         <div className="customer-summary-card customer-summary-card-highlight">
-          <span className="mono"><Repeat2 size={13} /> Repeat requests</span>
+          <span className="mono"><Repeat2 size={13} /> Repeat orders</span>
           <strong>{repeatOrders}</strong>
-          <small>Times they came back after the first request</small>
+          <small>{paidOrders ? `${paidOrders} paid order${paidOrders === 1 ? '' : 's'} · ${formatMoney(paidTotal, business.currency)}` : 'No paid orders yet'}</small>
         </div>
         <div className="customer-summary-card">
           <span className="mono">Last activity</span>
@@ -181,7 +194,7 @@ export default async function CustomerProfilePage(props: { params: Promise<{ id:
 
           <div className="customer-repeat-note">
             <Repeat2 size={17} />
-            <p><strong>Repeat customer</strong> is calculated from this customer&apos;s lead history: every request after their first one counts as a return request.</p>
+            <p><strong>Repeat orders</strong> count paid quotes after this customer&apos;s first paid order. Requests that were lost, archived or never paid are not counted.</p>
           </div>
         </aside>
       </div>

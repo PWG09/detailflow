@@ -57,10 +57,10 @@ export async function assessVehicle(images: Uint8Array[], signal?: AbortSignal):
   const baseUrl = (process.env.AI_BASE_URL || NVIDIA_BASE_URL).replace(/\/$/, '');
   const model = process.env.AI_MODEL || process.env.OPENAI_VISION_MODEL || NVIDIA_MODEL;
 
-  if (!apiKey) throw new Error('AI API key is not configured in Vercel.');
+  if (!apiKey) throw new Error('AI_API_KEY is not configured.');
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  const timer = setTimeout(() => controller.abort(), 45000);
   const abortForwarder = signal ? () => controller.abort() : undefined;
   signal?.addEventListener('abort', abortForwarder!);
 
@@ -137,7 +137,7 @@ export async function assessVehicle(images: Uint8Array[], signal?: AbortSignal):
     return parseModelJson(json?.choices?.[0]?.message?.content);
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('NVIDIA AI request timed out after 90 seconds.');
+      throw new Error('AI request timed out after 45 seconds.');
     }
     throw error;
   } finally {

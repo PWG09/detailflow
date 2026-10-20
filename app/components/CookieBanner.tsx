@@ -1,3 +1,54 @@
 'use client';
 import { useEffect, useState } from 'react';
-export default function CookieBanner(){const [show,setShow]=useState(false);useEffect(()=>{setShow(localStorage.getItem('detailflow-cookie-consent')!=='accepted')},[]);if(!show)return null;return <div role="dialog" aria-label="Cookie notice" style={{position:'fixed',bottom:16,left:16,right:16,zIndex:1000,background:'#111827',color:'#fff',padding:18,borderRadius:14,boxShadow:'0 12px 40px rgba(0,0,0,.25)',display:'flex',gap:16,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}><div><strong>Privacy choices</strong><div style={{fontSize:13,opacity:.85,marginTop:4}}>DetailFlow uses essential cookies for authentication and security. Optional analytics should only be enabled after consent.</div></div><button className="button-primary" onClick={()=>{localStorage.setItem('detailflow-cookie-consent','accepted');setShow(false)}}>Accept</button></div>}
+import { usePathname } from 'next/navigation';
+
+const STORAGE_KEY = 'detailflow-cookie-consent';
+
+// DetailFlow only sets essential (auth/security) cookies, so this is a notice,
+// not a consent gate. It is never shown inside task flows where a fixed bar
+// would cover the form's action buttons on mobile (the historical "overlay
+// blocks Continue" bug on the lead form).
+function isTaskFlow(pathname: string) {
+  return /^\/[^/]+\/lead\/?$/.test(pathname)
+    || pathname.startsWith('/q/')
+    || pathname.startsWith('/quote')
+    || pathname.startsWith('/dashboard')
+    || pathname.startsWith('/onboarding')
+    || pathname.startsWith('/login')
+    || pathname.startsWith('/reset-password')
+    || pathname.startsWith('/update-password')
+    || pathname.startsWith('/upgrade');
+}
+
+export default function CookieBanner() {
+  const pathname = usePathname() ?? '/';
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    try {
+      setShow(localStorage.getItem(STORAGE_KEY) !== 'accepted');
+    } catch {
+      setShow(false);
+    }
+  }, []);
+
+  if (!show || isTaskFlow(pathname)) return null;
+
+  function dismiss() {
+    try { localStorage.setItem(STORAGE_KEY, 'accepted'); } catch { /* storage unavailable */ }
+    setShow(false);
+  }
+
+  return (
+    <div
+      role="region"
+      aria-label="Cookie notice"
+      className="cookie-notice"
+    >
+      <div className="cookie-notice-text">
+        DetailFlow uses only essential cookies for sign-in and security. <a href="/cookies">Learn more</a>
+      </div>
+      <button className="button-primary" type="button" onClick={dismiss} style={{ minHeight: 40 }}>Got it</button>
+    </div>
+  );
+}

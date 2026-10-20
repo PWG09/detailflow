@@ -1,4 +1,7 @@
 import Stripe from 'stripe';
+import { assertStripeKeyForEnvironment } from '@/lib/stripe-env';
+
+export { assertStripeKeyForEnvironment };
 
 let stripeClient: Stripe | undefined;
 
@@ -6,10 +9,8 @@ export function getStripe() {
   if (!stripeClient) {
     const secretKey = process.env.STRIPE_SECRET_KEY;
     if (!secretKey) throw new Error('Missing STRIPE_SECRET_KEY');
-    if (process.env.NODE_ENV === 'production' && !secretKey.startsWith('sk_live_')) {
-      throw new Error('Production requires a live Stripe secret key (sk_live_).');
-    }
-    stripeClient = new Stripe(secretKey);
+    assertStripeKeyForEnvironment(secretKey);
+    stripeClient = new Stripe(secretKey, { maxNetworkRetries: 2, timeout: 20_000 });
   }
   return stripeClient;
 }
